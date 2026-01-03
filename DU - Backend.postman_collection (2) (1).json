@@ -1,0 +1,527 @@
+{
+	"info": {
+		"_postman_id": "e38801c7-742d-45e8-9707-cff76ad0d136",
+		"name": "DU - Backend",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "49374933",
+		"_collection_link": "https://dark-astronaut-397311.postman.co/workspace/Team-Workspace~c58ce70d-b710-4cf1-8dc6-b1379289f795/collection/49374933-e38801c7-742d-45e8-9707-cff76ad0d136?action=share&source=collection_link&creator=49374933"
+	},
+	"item": [
+		{
+			"name": "Create_Ir_id",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"ir_id\":\"IM31201\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseURL}}/api/add_ir_id",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"add_ir_id"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "registerting_new_ir",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept-Charset",
+						"value": "utf-8",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"ir_id\": \"IM31201\",\n    \"ir_name\": \"Sneh S N\",\n    \"ir_email\": \"snehti@gmail.com\",\n    \"ir_password\": \"Test\",\n    \"ir_access_level\": 1\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseURL}}/api/register_new_ir",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"register_new_ir"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get_registered_irs",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/irs",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"irs"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create_team",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\":\"Wolfpacks\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://du-backend-t437.onrender.com/api/create_team",
+					"protocol": "https",
+					"host": [
+						"du-backend-t437",
+						"onrender",
+						"com"
+					],
+					"path": [
+						"api",
+						"create_team"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get All Teams",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/teams",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"teams"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Team Data",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PATCH",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"Dreamers\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseURL}}/api/update_team_name/1",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"update_team_name",
+						"1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Team",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/delete_team/1",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"delete_team",
+						"1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add IR to team",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"ir_id\": \"IM1579\",\n    \"team_id\": \"1\",\n    \"role\": \"LDC\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseURL}}/api/add_ir_to_team",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"add_ir_to_team"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Team Members",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/team_members/1",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"team_members",
+						"1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Remove IR from the team",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/remove_ir_from_team/{team_id}/{ir_id}",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"remove_ir_from_team",
+						"{team_id}",
+						"{ir_id}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add Info Data",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "[   {\n        \"ir_id\": \"IM1579\",\n        \"info_date\": \"2025-10-22T12:00:00+05:30\", \n        \"response\": \"A\",    \n        \"comments\": \"comments\",\n        \"info_name\": \"Sunayanaa\"\n    }\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseURL}}/api/add_info_detail/IM1579",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"add_info_detail",
+						"IM1579"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Info Details of IR",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/info_details/IM1579",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"info_details",
+						"IM1579"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Info Data",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"info_name\":\"Snehith\",\n    \"comments\":\"Updated via script\",\n    \"response\":\"A\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseURL}}/api/update_info_detail/{info_id}",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"update_info_detail",
+						"{info_id}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Info Details",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/delete_info_detail/{info_id}",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"delete_info_detail",
+						"{info_id}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get All LDCs/Managers",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/ldcs",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"ldcs"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Teams Managed By LDCs",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/teams_by_ldc/IM1579",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"teams_by_ldc",
+						"IM1579"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Set Targets",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"payload\":{\n        \"team_id\": \"1\",\n        \"team_weekly_info_target\": \"25\",\n        \"team_weekly_plan_target\": \"10\",\n        \"ir_id\": \"IM1579\",\n        \"weekly_info_target\": \"15\",\n        \"weekly_plan_target\": \"3\"\n    },\n    \"acting_ir_id\":\"IM1579\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseURL}}/api/set_targets",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"set_targets"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Targets",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/targets_dashboard/IM1579",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"targets_dashboard",
+						"IM1579"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get_team_by_ir",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseURL}}/api/teams_by_ir/IM1781",
+					"host": [
+						"{{baseURL}}"
+					],
+					"path": [
+						"api",
+						"teams_by_ir",
+						"IM1781"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "New Request",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "baseURL",
+			"value": "",
+			"type": "default"
+		}
+	]
+}
