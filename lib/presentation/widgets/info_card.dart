@@ -7,6 +7,7 @@ class InfoCard extends StatelessWidget {
   final int clientMeetings;
   final int targetCalls;
   final int targetMeetings;
+  final int targetUv;
   final VoidCallback? onTap;
   final bool isLead;
   final bool isManager;
@@ -23,6 +24,7 @@ class InfoCard extends StatelessWidget {
     required this.clientMeetings,
     this.targetCalls = 0,
     this.targetMeetings = 0,
+    this.targetUv = 0,
     this.onTap,
     this.isLead = false,
     this.isManager = false,
@@ -59,14 +61,14 @@ class InfoCard extends StatelessWidget {
                     ),
                   ),
                   if (isLead)
-                    _roleBadge('Team Lead', Icons.star, Colors.amber.shade400),
+                    _roleBadge('LS', Icons.star, Colors.amber.shade400),
                   if (isManager)
                     Padding(
                       padding: const EdgeInsets.only(left: 8.0),
-                      child: _roleBadge('Manager', Icons.workspace_premium, Colors.cyanAccent),
+                      child: _roleBadge('LDC', Icons.workspace_premium, Colors.cyanAccent),
                     ),
                   if (isTeam)
-                    _roleBadge('Team', Icons.group, Colors.purple.shade300),
+                    _roleBadge('IR', Icons.group, Colors.purple.shade300),
                   if (trailing != null) Padding(padding: const EdgeInsets.only(left: 8.0), child: trailing!),
                 ],
               ),
@@ -84,7 +86,7 @@ class InfoCard extends StatelessWidget {
                       ),
                       _infoTile(
                         "UVs",
-                        totalTurnover.toStringAsFixed(2),
+                        _formatNumberWithTarget(totalTurnover, targetUv),
                         highlight: true,
                       ),
                       _infoTile(
@@ -102,15 +104,19 @@ class InfoCard extends StatelessWidget {
   }
 
   Widget _buildMemberStats() {
+    final callsValue = targetCalls > 0 ? "$totalCalls/$targetCalls" : "$totalCalls";
+    final plansValue = targetMeetings > 0 ? "$clientMeetings/$targetMeetings" : "$clientMeetings";
+    final uvValue = _formatNumberWithTarget(totalTurnover, targetUv);
+
     return Column(
       children: [
         Row(
           children: [
             Expanded(
-              child: _statRow("Total Calls", "$totalCalls/$targetCalls"),
+              child: _statRow("Total Calls", callsValue),
             ),
             Expanded(
-              child: _statRow("UVs", totalTurnover.toStringAsFixed(2)),
+              child: _statRow("UVs", uvValue),
             ),
           ],
         ),
@@ -118,7 +124,7 @@ class InfoCard extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _statRow("Plans", "$clientMeetings/$targetMeetings"),
+              child: _statRow("Plans", plansValue),
             ),
             const Expanded(child: SizedBox()),
           ],
@@ -195,5 +201,21 @@ class InfoCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatNumberWithTarget(double value, int target) {
+    final String base;
+    if (value.isNaN || value.isInfinite) {
+      base = '0';
+    } else if (value == value.roundToDouble()) {
+      base = value.toInt().toString();
+    } else {
+      base = value.toStringAsFixed(2);
+    }
+
+    if (target > 0) {
+      return '$base/$target';
+    }
+    return base;
   }
 }

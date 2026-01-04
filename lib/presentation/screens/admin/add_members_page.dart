@@ -35,6 +35,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
   final _teamNameController = TextEditingController();
   final _weeklyInfoTargetController = TextEditingController();
   final _weeklyPlanTargetController = TextEditingController();
+  final _weeklyUvTargetController = TextEditingController();
 
   String? _selectedIrId;
   String? _selectedTeamId;
@@ -57,6 +58,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
     _teamNameController.dispose();
     _weeklyInfoTargetController.dispose();
     _weeklyPlanTargetController.dispose();
+    _weeklyUvTargetController.dispose();
     super.dispose();
   }
 
@@ -128,6 +130,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
             'name': (team['name'] ?? 'Unnamed Team').toString(),
             'weekly_info_target': team['weekly_info_target'] ?? 0,
             'weekly_plan_target': team['weekly_plan_target'] ?? 0,
+            'weekly_uv_target': team['weekly_uv_target'] ?? team['uv_target'] ?? 0,
           }).toList();
         });
       }
@@ -144,10 +147,11 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       if (teamId != null) {
         final team = _managerTeams.firstWhere(
           (t) => t['id'] == teamId,
-          orElse: () => {'weekly_info_target': 0, 'weekly_plan_target': 0},
+          orElse: () => {'weekly_info_target': 0, 'weekly_plan_target': 0, 'weekly_uv_target': 0},
         );
         _weeklyInfoTargetController.text = (team['weekly_info_target'] ?? 0).toString();
         _weeklyPlanTargetController.text = (team['weekly_plan_target'] ?? 0).toString();
+        _weeklyUvTargetController.text = (team['weekly_uv_target'] ?? 0).toString();
       }
     });
   }
@@ -160,8 +164,9 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
 
     final infoTarget = int.tryParse(_weeklyInfoTargetController.text) ?? 0;
     final planTarget = int.tryParse(_weeklyPlanTargetController.text) ?? 0;
+    final uvTarget = int.tryParse(_weeklyUvTargetController.text) ?? 0;
 
-    if (infoTarget < 0 || planTarget < 0) {
+    if (infoTarget < 0 || planTarget < 0 || uvTarget < 0) {
       _showSnackBar('Targets must be positive numbers', isError: true);
       return;
     }
@@ -172,6 +177,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       teamId: _selectedTargetTeamId!,
       teamWeeklyInfoTarget: infoTarget,
       teamWeeklyPlanTarget: planTarget,
+      teamWeeklyUvTarget: uvTarget,
       actingIrId: widget.irId,
     );
 
@@ -185,6 +191,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
         _selectedTargetTeamId = null;
         _weeklyInfoTargetController.clear();
         _weeklyPlanTargetController.clear();
+        _weeklyUvTargetController.clear();
         showSetTargets = false;
       });
       Navigator.pop(context);
@@ -678,6 +685,15 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
                           labelText: 'Weekly Plan Target',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _weeklyUvTargetController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Weekly UV Target',
                           border: OutlineInputBorder(),
                         ),
                       ),

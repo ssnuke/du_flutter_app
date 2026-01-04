@@ -39,7 +39,6 @@ class _TeamsPageState extends State<TeamsPage> {
   }
 
   Future<void> _fetchTeams() async {
-    debugPrint('_fetchTeams: starting for ir ${widget.irId}');
     setState(() {
       isLoading = true;
       errorMessage = '';
@@ -67,17 +66,34 @@ class _TeamsPageState extends State<TeamsPage> {
           if (prev != null) {
             final info = (t.weeklyInfoTarget == 0 && prev.weeklyInfoTarget != 0) ? prev.weeklyInfoTarget : t.weeklyInfoTarget;
             final plan = (t.weeklyPlanTarget == 0 && prev.weeklyPlanTarget != 0) ? prev.weeklyPlanTarget : t.weeklyPlanTarget;
-            return Team(name: t.name, id: t.id, weeklyInfoTarget: info, weeklyPlanTarget: plan);
+            final uv = (t.weeklyUvTarget == 0 && prev.weeklyUvTarget != 0) ? prev.weeklyUvTarget : t.weeklyUvTarget;
+            final infoProgress = (t.infoProgress == 0 && prev.infoProgress != 0) ? prev.infoProgress : t.infoProgress;
+            final planProgress = (t.planProgress == 0 && prev.planProgress != 0) ? prev.planProgress : t.planProgress;
+            final uvProgress = (t.uvProgress == 0 && prev.uvProgress != 0) ? prev.uvProgress : t.uvProgress;
+            final weekNumber = t.weekNumber != 0 ? t.weekNumber : prev.weekNumber;
+            final year = t.year != 0 ? t.year : prev.year;
+            return Team(
+              name: t.name,
+              id: t.id,
+              weeklyInfoTarget: info,
+              weeklyPlanTarget: plan,
+              weeklyUvTarget: uv,
+              infoProgress: infoProgress,
+              planProgress: planProgress,
+              uvProgress: uvProgress,
+              weekNumber: weekNumber,
+              year: year,
+            );
           }
           return t;
         }).toList();
 
-        debugPrint('_fetchTeams: response OK, received ${data.length} teams');
         setState(() {
           teamData = merged;
           isLoading = false;
         });
         // Fetch per-team targets (if stored separately) and then compute totals.
+        debugPrint('Teams fetched: ${teamData.length} items');
         await _fetchTargetsForTeams();
         await _fetchTeamTotalCalls();
       } else {
@@ -132,12 +148,11 @@ class _TeamsPageState extends State<TeamsPage> {
   /// Try to fetch targets for the current user and merge them into the `teamData`.
   Future<void> _fetchTargetsForTeams() async {
     if (teamData.isEmpty) return;
-    debugPrint('_fetchTargetsForTeams: starting');
     try {
       final result = await ApiService.getTargetsDashboard(widget.irId);
       if (result['success']) {
         final data = result['data'];
-        debugPrint('Fetched targets data: $data');
+        debugPrint("Fetched targets data: $data");
         // Build a mapping of teamId -> targets
         final Map<String, Map<String, int>> mapping = {};
 
@@ -147,7 +162,22 @@ class _TeamsPageState extends State<TeamsPage> {
             if (teamId.isEmpty) continue;
             final infoT = int.tryParse((item['team_weekly_info_target'] ?? item['weekly_info_target'] ?? 0).toString()) ?? 0;
             final planT = int.tryParse((item['team_weekly_plan_target'] ?? item['weekly_plan_target'] ?? 0).toString()) ?? 0;
-            mapping[teamId] = {'info': infoT, 'plan': planT};
+            final uvT = int.tryParse((item['team_weekly_uv_target'] ?? item['weekly_uv_target'] ?? item['uv_target'] ?? 0).toString()) ?? 0;
+            final infoProgress = int.tryParse((item['info_progress'] ?? item['info_count'] ?? 0).toString()) ?? 0;
+            final planProgress = int.tryParse((item['plan_progress'] ?? item['plan_count'] ?? 0).toString()) ?? 0;
+            final uvProgress = int.tryParse((item['uv_progress'] ?? item['uv_count'] ?? 0).toString()) ?? 0;
+            final weekNumber = int.tryParse((item['week_number'] ?? 0).toString()) ?? 0;
+            final year = int.tryParse((item['year'] ?? 0).toString()) ?? 0;
+            mapping[teamId] = {
+              'info': infoT,
+              'plan': planT,
+              'uv': uvT,
+              'infoProgress': infoProgress,
+              'planProgress': planProgress,
+              'uvProgress': uvProgress,
+              'weekNumber': weekNumber,
+              'year': year,
+            };
           }
         } else if (data is Map) {
           // If backend returns a map keyed by team id or single object
@@ -157,7 +187,22 @@ class _TeamsPageState extends State<TeamsPage> {
               if (teamId.isEmpty) continue;
               final infoT = int.tryParse((item['team_weekly_info_target'] ?? item['weekly_info_target'] ?? 0).toString()) ?? 0;
               final planT = int.tryParse((item['team_weekly_plan_target'] ?? item['weekly_plan_target'] ?? 0).toString()) ?? 0;
-              mapping[teamId] = {'info': infoT, 'plan': planT};
+              final uvT = int.tryParse((item['team_weekly_uv_target'] ?? item['weekly_uv_target'] ?? item['uv_target'] ?? 0).toString()) ?? 0;
+              final infoProgress = int.tryParse((item['info_progress'] ?? item['info_count'] ?? 0).toString()) ?? 0;
+              final planProgress = int.tryParse((item['plan_progress'] ?? item['plan_count'] ?? 0).toString()) ?? 0;
+              final uvProgress = int.tryParse((item['uv_progress'] ?? item['uv_count'] ?? 0).toString()) ?? 0;
+              final weekNumber = int.tryParse((item['week_number'] ?? 0).toString()) ?? 0;
+              final year = int.tryParse((item['year'] ?? 0).toString()) ?? 0;
+              mapping[teamId] = {
+                'info': infoT,
+                'plan': planT,
+                'uv': uvT,
+                'infoProgress': infoProgress,
+                'planProgress': planProgress,
+                'uvProgress': uvProgress,
+                'weekNumber': weekNumber,
+                'year': year,
+              };
             }
           } else {
             // maybe single team object
@@ -165,7 +210,22 @@ class _TeamsPageState extends State<TeamsPage> {
             if (teamId.isNotEmpty) {
               final infoT = int.tryParse((data['team_weekly_info_target'] ?? data['weekly_info_target'] ?? 0).toString()) ?? 0;
               final planT = int.tryParse((data['team_weekly_plan_target'] ?? data['weekly_plan_target'] ?? 0).toString()) ?? 0;
-              mapping[teamId] = {'info': infoT, 'plan': planT};
+              final uvT = int.tryParse((data['team_weekly_uv_target'] ?? data['weekly_uv_target'] ?? data['uv_target'] ?? 0).toString()) ?? 0;
+              final infoProgress = int.tryParse((data['info_progress'] ?? data['info_count'] ?? 0).toString()) ?? 0;
+              final planProgress = int.tryParse((data['plan_progress'] ?? data['plan_count'] ?? 0).toString()) ?? 0;
+              final uvProgress = int.tryParse((data['uv_progress'] ?? data['uv_count'] ?? 0).toString()) ?? 0;
+              final weekNumber = int.tryParse((data['week_number'] ?? 0).toString()) ?? 0;
+              final year = int.tryParse((data['year'] ?? 0).toString()) ?? 0;
+              mapping[teamId] = {
+                'info': infoT,
+                'plan': planT,
+                'uv': uvT,
+                'infoProgress': infoProgress,
+                'planProgress': planProgress,
+                'uvProgress': uvProgress,
+                'weekNumber': weekNumber,
+                'year': year,
+              };
             }
           }
         }
@@ -180,6 +240,12 @@ class _TeamsPageState extends State<TeamsPage> {
                   id: t.id,
                   weeklyInfoTarget: m['info'] ?? t.weeklyInfoTarget,
                   weeklyPlanTarget: m['plan'] ?? t.weeklyPlanTarget,
+                  weeklyUvTarget: m['uv'] ?? t.weeklyUvTarget,
+                  infoProgress: m['infoProgress'] ?? t.infoProgress,
+                  planProgress: m['planProgress'] ?? t.planProgress,
+                  uvProgress: m['uvProgress'] ?? t.uvProgress,
+                  weekNumber: m['weekNumber'] ?? t.weekNumber,
+                  year: m['year'] ?? t.year,
                 );
               }
               return t;
@@ -244,13 +310,16 @@ class _TeamsPageState extends State<TeamsPage> {
                       itemCount: teamData.length,
                       itemBuilder: (context, index) {
                         final team = teamData[index];
-                        final int actualCalls = teamTotalCalls[team.id] ?? 0;
+                        final int actualCalls = team.infoProgress != 0
+                            ? team.infoProgress
+                            : (teamTotalCalls[team.id] ?? 0);
                         return InfoCard(
                           managerName: team.name,
                           totalCalls: actualCalls,
                           targetCalls: team.weeklyInfoTarget,
-                          totalTurnover: 0.0,
-                          clientMeetings: 0,
+                          totalTurnover: team.uvProgress.toDouble(),
+                          targetUv: team.weeklyUvTarget,
+                          clientMeetings: team.planProgress,
                           targetMeetings: team.weeklyPlanTarget,
                           isTeam: true,
                           onTap: () {
@@ -264,11 +333,18 @@ class _TeamsPageState extends State<TeamsPage> {
                                   loggedInIrId: widget.loggedInIrId ?? widget.irId,
                                   weeklyInfoTarget: team.weeklyInfoTarget,
                                   weeklyPlanTarget: team.weeklyPlanTarget,
+                                  weeklyUvTarget: team.weeklyUvTarget,
+                                  infoProgress: team.infoProgress,
+                                  planProgress: team.planProgress,
+                                  uvProgress: team.uvProgress,
+                                  weekNumber: team.weekNumber,
+                                  year: team.year,
                                 ),
                               ),
                             ).then((_) {
                               // Re-fetch full team list (including weekly targets)
                               _fetchTeams();
+                              _fetchTeamTotalCalls();
                             });
                           },
                         );

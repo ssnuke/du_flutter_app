@@ -39,3 +39,7 @@ const String getAllIrsEndpoint = "/api/irs/"; // Get all registered IRs
 const String setTargetsEndpoint = "/api/set_targets/";
 const String getTargetsEndpoint = "/api/get_targets/";
 const String getTargetsDashboardEndpoint = "/api/targets_dashboard"; // + /{ir_id}
+
+// API Endpoints - UVs
+const String addUvEndpoint = "/api/add_uv"; // + /{ir_id}
+const String getUvEndpoint = "/api/uv_count"; // + /{ir_id}

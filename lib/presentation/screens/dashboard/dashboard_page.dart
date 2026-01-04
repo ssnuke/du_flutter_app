@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:leadtracker/data/services/api_service.dart';
 
@@ -47,8 +48,12 @@ class _DashboardPageState extends State<DashboardPage> {
   void initState() {
     super.initState();
     _setDefaultWeekRange();
+    _fetchPlans();
     _fetchLeads();
+    _fetchUvCount();
   }
+
+
 
   void _setDefaultWeekRange() {
     final today = DateTime.now();
@@ -106,6 +111,51 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  Future<void> _fetchUvCount() async {
+    final result = await ApiService.getUvCount(widget.irId);
+
+    if (result['success']) {
+      final data = result['data'];
+
+      double? parseToDouble(dynamic value) {
+        if (value is num) {
+          return value.toDouble();
+        }
+        if (value is String) {
+          return double.tryParse(value);
+        }
+        return null;
+      }
+
+      double? parsedValue;
+      if (data is Map<String, dynamic>) {
+        const candidateKeys = ['uv_count', 'uvCount', 'total', 'value'];
+        for (final key in candidateKeys) {
+          if (data.containsKey(key)) {
+            parsedValue = parseToDouble(data[key]);
+            if (parsedValue != null) {
+              break;
+            }
+          }
+        }
+      } else {
+        parsedValue = parseToDouble(data);
+      }
+
+      if (parsedValue != null) {
+        final double newValue = parsedValue;
+        if (!mounted) return;
+        setState(() {
+          totalTurnover = newValue;
+        });
+      } else {
+        debugPrint('Unable to parse UV count from response: $data');
+      }
+    } else {
+      debugPrint('Failed to fetch UV count: ${result['error']}');
+    }
+  }
+
   void _calculateAggregatedData() {
     List<Map<String, dynamic>> filteredLeads;
     List<Map<String, dynamic>> filteredPlans;
@@ -139,7 +189,6 @@ class _DashboardPageState extends State<DashboardPage> {
       _filteredLeads = filteredLeads;
       _filteredPlans = filteredPlans;
       totalCalls = filteredLeads.length;
-      totalTurnover = 0.0;
       totalMeetings = filteredPlans.length;
     });
   }
@@ -442,6 +491,106 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  void _showAddUvFallenDialog() {
+    final uvController = TextEditingController();
+    final parentContext = context;
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E1E2E),
+              title: const Text("Add UV's Fallen", style: TextStyle(color: Colors.white)),
+              content: TextField(
+                controller: uvController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'UV Count',
+                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                  ),
+                  focusedBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.orangeAccent),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final rawValue = uvController.text.trim();
+                          if (rawValue.isEmpty) {
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              const SnackBar(content: Text('Please enter the UV count')),
+                            );
+                            return;
+                          }
+
+                          final parsedValue = double.tryParse(rawValue);
+                          if (parsedValue == null) {
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              const SnackBar(content: Text('Enter a valid number')),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() => isSubmitting = true);
+
+                          final result = await ApiService.addUvFallen(
+                            irId: widget.irId,
+                            uvCount: parsedValue,
+                          );
+
+                          setDialogState(() => isSubmitting = false);
+
+                          if (!mounted) return;
+
+                          if (result['success']) {
+                            Navigator.pop(dialogContext);
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              const SnackBar(
+                                content: Text("UV's fallen recorded"),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            await _fetchUvCount();
+                          } else {
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              SnackBar(
+                                content: Text(result['error'] ?? 'Failed to add UV count'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                        )
+                      : const Text('Save', style: TextStyle(color: Colors.black)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showEditLeadDialog(Map<String, dynamic> lead) {
     final nameController = TextEditingController(text: lead['name']);
     final commentController = TextEditingController(text: lead['comments'] ?? '');
@@ -619,6 +768,15 @@ class _DashboardPageState extends State<DashboardPage> {
                               _showAddPlanDialog();
                             },
                           ),
+                        if (canAddPlan)
+                          ListTile(
+                            leading: const Icon(Icons.trending_down, color: Colors.orangeAccent),
+                            title: const Text("Add UV's Fallen", style: TextStyle(color: Colors.white)),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _showAddUvFallenDialog();
+                            },
+                          ),
                       ],
                     ),
                   ),
@@ -683,7 +841,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
                           _buildSummaryItem('Calls', totalCalls.toString()),
-                          _buildSummaryItem('UVs', totalTurnover.toStringAsFixed(0)),
+                          _buildSummaryItem('UVs', totalTurnover.toStringAsFixed(1)),
                           _buildSummaryItem('Plans', totalMeetings.toString()),
                         ],
                       ),

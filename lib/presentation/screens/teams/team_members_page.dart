@@ -14,6 +14,12 @@ class TeamMembersPage extends StatefulWidget {
   final String loggedInIrId;
   final int weeklyInfoTarget;
   final int weeklyPlanTarget;
+  final int weeklyUvTarget;
+  final int infoProgress;
+  final int planProgress;
+  final int uvProgress;
+  final int weekNumber;
+  final int year;
 
   const TeamMembersPage({
     super.key,
@@ -23,6 +29,12 @@ class TeamMembersPage extends StatefulWidget {
     required this.loggedInIrId,
     this.weeklyInfoTarget = 0,
     this.weeklyPlanTarget = 0,
+    this.weeklyUvTarget = 0,
+    this.infoProgress = 0,
+    this.planProgress = 0,
+    this.uvProgress = 0,
+    this.weekNumber = 0,
+    this.year = 0,
   });
 
   @override
@@ -32,11 +44,20 @@ class TeamMembersPage extends StatefulWidget {
 class _TeamMembersPageState extends State<TeamMembersPage> {
   List<dynamic> members = [];
   Map<String, int> memberLeadCounts = {};
+  Map<String, int> memberPlanCounts = {};
+  Map<String, int> memberUvCounts = {};
   bool isLoading = true;
   String error = '';
 
-  late int currentWeeklyInfoTarget;
-  late int currentWeeklyPlanTarget;
+  int currentWeeklyInfoTarget = 0;
+  int currentWeeklyPlanTarget = 0;
+  int currentWeeklyUvTarget = 0;
+  int currentInfoProgress = 0;
+  int currentPlanProgress = 0;
+  int currentUvProgress = 0;
+  int currentWeekNumber = 0;
+  int currentYear = 0;
+  
 
   bool get isManager => widget.userRole <= 2;
   bool get isTeamLead => widget.userRole == 3;
@@ -49,6 +70,12 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
     super.initState();
     currentWeeklyInfoTarget = widget.weeklyInfoTarget;
     currentWeeklyPlanTarget = widget.weeklyPlanTarget;
+    currentWeeklyUvTarget = widget.weeklyUvTarget;
+    currentInfoProgress = widget.infoProgress;
+    currentPlanProgress = widget.planProgress;
+    currentUvProgress = widget.uvProgress;
+    currentWeekNumber = widget.weekNumber;
+    currentYear = widget.year;
     fetchTeamMembers();
   }
 
@@ -56,6 +83,11 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
     final url = Uri.parse('$baseUrl/api/team_members/${widget.teamId}');
 
     try {
+      setState(() {
+        isLoading = true;
+        error = '';
+      });
+
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -63,10 +95,15 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
 
         setState(() {
           members = data;
-          isLoading = false;
         });
 
-        _fetchLeadCounts();
+        await _fetchTeamMetrics();
+
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+        }
       } else {
         setState(() {
           error = 'Failed to load members. (${response.statusCode})';
@@ -81,26 +118,74 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
     }
   }
 
-  Future<void> _fetchLeadCounts() async {
-    for (final member in members) {
-      final String irId = member['ir_id'] ?? '';
-      if (irId.isEmpty) continue;
+  Future<void> _fetchTeamMetrics() async {
+    final result = await ApiService.getTeamInfoTotal(widget.teamId);
+    if (!mounted) return;
 
-      final result = await ApiService.getInfoDetails(irId);
-      if (result['success']) {
-        final List<dynamic> leads = result['data'] ?? [];
-        if (mounted) {
-          setState(() {
-            memberLeadCounts[irId] = leads.length;
-          });
+    if (result['success'] == true) {
+      final dynamic data = result['data'];
+      if (data is Map<String, dynamic>) {
+        final membersData = (data['members'] as List<dynamic>? ?? []);
+
+        final updatedLeadCounts = <String, int>{};
+        final updatedPlanCounts = <String, int>{};
+        final updatedUvCounts = <String, int>{};
+
+        for (final entry in membersData) {
+          if (entry is Map<String, dynamic>) {
+            final memberId = (entry['ir_id'] ?? '').toString();
+            if (memberId.isEmpty) continue;
+
+            updatedLeadCounts[memberId] = _parseInt(entry['info_total']);
+            updatedPlanCounts[memberId] = _parseInt(entry['plan_total']);
+            updatedUvCounts[memberId] = _parseInt(entry['uv_count']);
+          }
         }
+
+        int infoTotal = _parseInt(data['members_info_total'] ?? data['running_weekly_info_done']);
+        int planTotal = _parseInt(data['members_plan_total'] ?? data['running_weekly_plan_done']);
+        int uvTotal = _parseInt(data['members_uv_total'] ?? data['running_weekly_uv_done']);
+
+        if (infoTotal == 0 && updatedLeadCounts.isNotEmpty) {
+          infoTotal = updatedLeadCounts.values.fold(0, (sum, value) => sum + value);
+        }
+        if (planTotal == 0 && updatedPlanCounts.isNotEmpty) {
+          planTotal = updatedPlanCounts.values.fold(0, (sum, value) => sum + value);
+        }
+        if (uvTotal == 0 && updatedUvCounts.isNotEmpty) {
+          uvTotal = updatedUvCounts.values.fold(0, (sum, value) => sum + value);
+        }
+
+        final int weekNumber = _parseInt(data['week_number'] ?? currentWeekNumber);
+        final int year = _parseInt(data['year'] ?? currentYear);
+
+        setState(() {
+          memberLeadCounts = updatedLeadCounts;
+          memberPlanCounts = updatedPlanCounts;
+          memberUvCounts = updatedUvCounts;
+          currentInfoProgress = infoTotal;
+          currentPlanProgress = planTotal;
+          currentUvProgress = uvTotal;
+          currentWeekNumber = weekNumber;
+          currentYear = year;
+        });
       }
+    } else {
+      debugPrint('Failed to fetch team metrics: ${result['error']}');
     }
+  }
+
+  int _parseInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.round();
+    return int.tryParse(value.toString()) ?? 0;
   }
 
   void _showSetTargetsDialog() {
     final infoTargetController = TextEditingController(text: currentWeeklyInfoTarget.toString());
     final planTargetController = TextEditingController(text: currentWeeklyPlanTarget.toString());
+    final uvTargetController = TextEditingController(text: currentWeeklyUvTarget.toString());
     bool isSubmitting = false;
     final parentContext = context;
 
@@ -152,6 +237,24 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: uvTargetController,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Weekly UV Target',
+                        labelStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Colors.cyanAccent),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -170,9 +273,9 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
                       : () async {
                           final infoTarget = int.tryParse(infoTargetController.text) ?? 0;
                           final planTarget = int.tryParse(planTargetController.text) ?? 0;
+                          final uvTarget = int.tryParse(uvTargetController.text) ?? 0;
 
-
-                          if (infoTarget < 0 || planTarget < 0) {
+                          if (infoTarget < 0 || planTarget < 0 || uvTarget < 0) {
                             ScaffoldMessenger.of(parentContext).showSnackBar(
                               const SnackBar(content: Text('Targets must be positive numbers')),
                             );
@@ -185,16 +288,18 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
                             teamId: widget.teamId,
                             teamWeeklyInfoTarget: infoTarget,
                             teamWeeklyPlanTarget: planTarget,
+                            teamWeeklyUvTarget: uvTarget,
                             actingIrId: widget.loggedInIrId,
                           );
 
                           setDialogState(() => isSubmitting = false);
-
+                          debugPrint('Set targets result: ${result['success']}');
                           if (result['success']) {
                             Navigator.pop(dialogContext);
                             setState(() {
                               currentWeeklyInfoTarget = infoTarget;
                               currentWeeklyPlanTarget = planTarget;
+                              currentWeeklyUvTarget = uvTarget;
                             });
                             ScaffoldMessenger.of(parentContext).showSnackBar(
                               const SnackBar(content: Text('Targets updated successfully!')),
@@ -232,7 +337,7 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
           ),
         ),
       ).then((_) {
-        _fetchLeadCounts();
+        _fetchTeamMetrics();
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -242,6 +347,10 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
   }
 
   Widget _buildTargetsHeader() {
+    final hasWeekInfo = currentWeekNumber > 0;
+    final weekLabel = hasWeekInfo
+      ? 'Team Targets for week $currentWeekNumber'
+      : 'Team Targets';
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -253,19 +362,23 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Team Targets',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+          Text(
+            weekLabel,
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
-                child: _buildTargetItem('Info Target', totalTeamCalls, currentWeeklyInfoTarget, Colors.cyanAccent),
+                child: _buildTargetItem('Info Target', currentInfoProgress, currentWeeklyInfoTarget, Colors.cyanAccent),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _buildTargetItem('Plan Target', 0, currentWeeklyPlanTarget, Colors.amber),
+                child: _buildTargetItem('Plan Target', currentPlanProgress, currentWeeklyPlanTarget, Colors.amber),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildTargetItem('UV Target', currentUvProgress, currentWeeklyUvTarget, Colors.amber),
               ),
             ],
           ),
@@ -339,6 +452,8 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
                           final bool isOwnProfile = memberId.isNotEmpty && memberId == widget.loggedInIrId;
 
                           final int leadCount = memberLeadCounts[memberId] ?? 0;
+                          final int planCount = memberPlanCounts[memberId] ?? 0;
+                          final int uvCount = memberUvCounts[memberId] ?? 0;
 
                           final bool canTap = widget.userRole <= 3 || isOwnProfile;
                           final bool shouldHideStats = widget.userRole == 4 && !isOwnProfile;
@@ -349,8 +464,8 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
                               managerName: isOwnProfile ? '$displayName (You)' : displayName,
                               totalCalls: leadCount,
                               targetCalls: 0,
-                              totalTurnover: 0.0,
-                              clientMeetings: 0,
+                              totalTurnover: uvCount.toDouble(),
+                              clientMeetings: planCount,
                               targetMeetings: 0,
                               isManager: roleNum == 2,
                               isLead: roleNum == 3,

@@ -269,10 +269,12 @@ class ApiService {
     required String teamId,
     required int teamWeeklyInfoTarget,
     required int teamWeeklyPlanTarget,
+    required int teamWeeklyUvTarget,
     required String actingIrId,
     String? irId,
     int? weeklyInfoTarget,
     int? weeklyPlanTarget,
+    int? weeklyUvTarget,
   }) async {
     try {
       final url = Uri.parse('$baseUrl$setTargetsEndpoint');
@@ -281,6 +283,7 @@ class ApiService {
         'team_id': teamId,
         'team_weekly_info_target': teamWeeklyInfoTarget.toString(),
         'team_weekly_plan_target': teamWeeklyPlanTarget.toString(),
+        'team_weekly_uv_target': teamWeeklyUvTarget.toString(),
       };
 
       // Add individual IR targets if provided
@@ -288,6 +291,7 @@ class ApiService {
         payload['ir_id'] = irId;
         payload['weekly_info_target'] = (weeklyInfoTarget ?? 0).toString();
         payload['weekly_plan_target'] = (weeklyPlanTarget ?? 0).toString();
+        payload['weekly_uv_target'] = (weeklyUvTarget ?? 0).toString();
       }
 
       final requestBody = {
@@ -430,8 +434,8 @@ class ApiService {
         'comments': comments,
       };
 
-      print('Updating plan at: $url');
-      print('Payload: ${jsonEncode(payload)}');
+      // print('Updating plan at: $url');
+      // print('Payload: ${jsonEncode(payload)}');
 
       final httpResponse = await http.put(
         url,
@@ -486,6 +490,91 @@ class ApiService {
     }
   }
 
+  // ==================== UV OPERATIONS ====================
+
+  /// Add UV count for an IR
+  static Future<Map<String, dynamic>> addUvFallen({
+    required String irId,
+    required double uvCount,
+  }) async {
+    try {
+      final url = Uri.parse('$baseUrl$addUvEndpoint/$irId/');
+      final payload = {
+        'ir_id': irId,
+        'uv_count': uvCount,
+      };
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        try {
+          return {'success': true, 'data': jsonDecode(response.body)};
+        } catch (_) {
+          return {'success': true, 'data': {'uv_count': uvCount}};
+        }
+      }
+
+      try {
+        final body = jsonDecode(response.body);
+        return {
+          'success': false,
+          'error': body['message'] ?? body['detail'] ?? 'Failed to add UV count',
+        };
+      } catch (_) {
+        return {
+          'success': false,
+          'error': 'Failed to add UV count (${response.statusCode})',
+        };
+      }
+    } catch (e) {
+      debugPrint('Add UV error: $e');
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
+
+  /// Retrieve UV count for an IR
+  static Future<Map<String, dynamic>> getUvCount(String irId) async {
+    try {
+      final url = Uri.parse('$baseUrl$getUvEndpoint/$irId');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        try {
+          return {'success': true, 'data': jsonDecode(response.body)};
+        } catch (_) {
+          final parsed = double.tryParse(response.body.trim());
+          if (parsed != null) {
+            return {'success': true, 'data': {'uv_count': parsed}};
+          }
+          return {
+            'success': true,
+            'data': {'raw': response.body},
+          };
+        }
+      }
+
+      try {
+        final body = jsonDecode(response.body);
+        return {
+          'success': false,
+          'error': body['message'] ?? body['detail'] ?? 'Failed to fetch UV count',
+        };
+      } catch (_) {
+        return {
+          'success': false,
+          'error': 'Failed to fetch UV count (${response.statusCode})',
+        };
+      }
+    } catch (e) {
+      debugPrint('Get UV count error: $e');
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
+
   /// Get team info total (members_info_total and members_plan_total)
   static Future<Map<String, dynamic>> getTeamInfoTotal(String teamId) async {
     final url = Uri.parse('$baseUrl$getTeamInfoTotalEndpoint/$teamId/');
@@ -501,4 +590,5 @@ class ApiService {
     }
   }
 }
+
 

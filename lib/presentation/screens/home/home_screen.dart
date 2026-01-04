@@ -28,11 +28,11 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return 'Super Admin';
       case 2:
-        return 'Manager (LDC)';
+        return 'LDC';
       case 3:
-        return 'Team Lead (LS)';
+        return 'LS';
       case 4:
-        return 'Member (GC)';
+        return 'IR';
       default:
         return 'User';
     }
