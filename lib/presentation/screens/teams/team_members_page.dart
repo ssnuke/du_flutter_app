@@ -263,12 +263,8 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
                   onPressed: isSubmitting ? null : () => Navigator.pop(dialogContext),
                   child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.6))),
                 ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.cyanAccent,
-                    foregroundColor: Colors.black,
-                  ),
-                  onPressed: isSubmitting
+                GestureDetector(
+                  onTap: isSubmitting
                       ? null
                       : () async {
                           final infoTarget = int.tryParse(infoTargetController.text) ?? 0;
@@ -310,9 +306,16 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
                             );
                           }
                         },
-                  child: isSubmitting
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Save'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: isSubmitting ? Colors.grey : Colors.cyanAccent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                        : const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  ),
                 ),
               ],
             );

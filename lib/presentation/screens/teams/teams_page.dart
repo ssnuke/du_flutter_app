@@ -277,9 +277,19 @@ class _TeamsPageState extends State<TeamsPage> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _fetchTeams,
-                      child: const Text('Retry'),
+                    GestureDetector(
+                      onTap: _fetchTeams,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                        decoration: BoxDecoration(
+                          color: Colors.cyanAccent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'Retry',
+                          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ],
                 ),

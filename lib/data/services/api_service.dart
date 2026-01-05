@@ -28,10 +28,15 @@ class ApiService {
           final body = jsonDecode(response.body);
           return {
             'success': false,
-            'error': body['message'] ?? body['detail'] ?? 'Failed to create team (${response.statusCode})'
+            'error': body['message'] ??
+                body['detail'] ??
+                'Failed to create team (${response.statusCode})'
           };
         } catch (e) {
-          return {'success': false, 'error': 'Failed to create team (${response.statusCode})'};
+          return {
+            'success': false,
+            'error': 'Failed to create team (${response.statusCode})'
+          };
         }
       }
     } catch (e) {
@@ -62,7 +67,8 @@ class ApiService {
         }),
       );
 
-      print('Add IR to team response: ${response.statusCode} - ${response.body}');
+      print(
+          'Add IR to team response: ${response.statusCode} - ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true, 'data': jsonDecode(response.body)};
@@ -71,10 +77,15 @@ class ApiService {
           final body = jsonDecode(response.body);
           return {
             'success': false,
-            'error': body['message'] ?? body['detail'] ?? 'Failed to add member to team (${response.statusCode})'
+            'error': body['message'] ??
+                body['detail'] ??
+                'Failed to add member to team (${response.statusCode})'
           };
         } catch (e) {
-          return {'success': false, 'error': 'Failed to add member to team (${response.statusCode})'};
+          return {
+            'success': false,
+            'error': 'Failed to add member to team (${response.statusCode})'
+          };
         }
       }
     } catch (e) {
@@ -96,7 +107,8 @@ class ApiService {
     } else {
       return {
         'success': false,
-        'error': jsonDecode(response.body)['message'] ?? 'Failed to remove member from team'
+        'error': jsonDecode(response.body)['message'] ??
+            'Failed to remove member from team'
       };
     }
   }
@@ -148,7 +160,8 @@ class ApiService {
     } else {
       return {
         'success': false,
-        'error': jsonDecode(httpResponse.body)['message'] ?? 'Failed to add lead'
+        'error':
+            jsonDecode(httpResponse.body)['message'] ?? 'Failed to add lead'
       };
     }
   }
@@ -194,7 +207,8 @@ class ApiService {
       debugPrint('Update Info Detail Error: ${httpResponse.body}');
       return {
         'success': false,
-        'error': jsonDecode(httpResponse.body)['message'] ?? 'Failed to update lead'
+        'error':
+            jsonDecode(httpResponse.body)['message'] ?? 'Failed to update lead'
       };
     }
   }
@@ -317,10 +331,15 @@ class ApiService {
           final body = jsonDecode(response.body);
           return {
             'success': false,
-            'error': body['message'] ?? body['detail'] ?? 'Failed to set targets (${response.statusCode})'
+            'error': body['message'] ??
+                body['detail'] ??
+                'Failed to set targets (${response.statusCode})'
           };
         } catch (e) {
-          return {'success': false, 'error': 'Failed to set targets (${response.statusCode})'};
+          return {
+            'success': false,
+            'error': 'Failed to set targets (${response.statusCode})'
+          };
         }
       }
     } catch (e) {
@@ -340,7 +359,8 @@ class ApiService {
     } else {
       return {
         'success': false,
-        'error': jsonDecode(response.body)['message'] ?? 'Failed to fetch targets'
+        'error':
+            jsonDecode(response.body)['message'] ?? 'Failed to fetch targets'
       };
     }
   }
@@ -375,7 +395,10 @@ class ApiService {
       try {
         return {'success': true, 'data': jsonDecode(httpResponse.body)};
       } catch (e) {
-        return {'success': false, 'error': 'Invalid response format from server'};
+        return {
+          'success': false,
+          'error': 'Invalid response format from server'
+        };
       }
     } else {
       String errorMessage = 'Failed to add plan';
@@ -407,10 +430,14 @@ class ApiService {
           final body = jsonDecode(response.body);
           return {
             'success': false,
-            'error': body['message'] ?? body['detail'] ?? 'Failed to fetch plans'
+            'error':
+                body['message'] ?? body['detail'] ?? 'Failed to fetch plans'
           };
         } catch (e) {
-          return {'success': false, 'error': 'Failed to fetch plans (${response.statusCode})'};
+          return {
+            'success': false,
+            'error': 'Failed to fetch plans (${response.statusCode})'
+          };
         }
       }
     } catch (e) {
@@ -453,10 +480,14 @@ class ApiService {
           final body = jsonDecode(httpResponse.body);
           return {
             'success': false,
-            'error': body['message'] ?? body['detail'] ?? 'Failed to update plan'
+            'error':
+                body['message'] ?? body['detail'] ?? 'Failed to update plan'
           };
         } catch (e) {
-          return {'success': false, 'error': 'Failed to update plan (${httpResponse.statusCode})'};
+          return {
+            'success': false,
+            'error': 'Failed to update plan (${httpResponse.statusCode})'
+          };
         }
       }
     } catch (e) {
@@ -478,10 +509,14 @@ class ApiService {
           final body = jsonDecode(response.body);
           return {
             'success': false,
-            'error': body['message'] ?? body['detail'] ?? 'Failed to delete plan'
+            'error':
+                body['message'] ?? body['detail'] ?? 'Failed to delete plan'
           };
         } catch (e) {
-          return {'success': false, 'error': 'Failed to delete plan (${response.statusCode})'};
+          return {
+            'success': false,
+            'error': 'Failed to delete plan (${response.statusCode})'
+          };
         }
       }
     } catch (e) {
@@ -514,7 +549,10 @@ class ApiService {
         try {
           return {'success': true, 'data': jsonDecode(response.body)};
         } catch (_) {
-          return {'success': true, 'data': {'uv_count': uvCount}};
+          return {
+            'success': true,
+            'data': {'uv_count': uvCount}
+          };
         }
       }
 
@@ -522,7 +560,8 @@ class ApiService {
         final body = jsonDecode(response.body);
         return {
           'success': false,
-          'error': body['message'] ?? body['detail'] ?? 'Failed to add UV count',
+          'error':
+              body['message'] ?? body['detail'] ?? 'Failed to add UV count',
         };
       } catch (_) {
         return {
@@ -548,7 +587,10 @@ class ApiService {
         } catch (_) {
           final parsed = double.tryParse(response.body.trim());
           if (parsed != null) {
-            return {'success': true, 'data': {'uv_count': parsed}};
+            return {
+              'success': true,
+              'data': {'uv_count': parsed}
+            };
           }
           return {
             'success': true,
@@ -561,7 +603,8 @@ class ApiService {
         final body = jsonDecode(response.body);
         return {
           'success': false,
-          'error': body['message'] ?? body['detail'] ?? 'Failed to fetch UV count',
+          'error':
+              body['message'] ?? body['detail'] ?? 'Failed to fetch UV count',
         };
       } catch (_) {
         return {
@@ -585,10 +628,66 @@ class ApiService {
     } else {
       return {
         'success': false,
-        'error': jsonDecode(response.body)['message'] ?? 'Failed to fetch team info totals'
+        'error': jsonDecode(response.body)['message'] ??
+            'Failed to fetch team info totals'
       };
     }
   }
+
+  // In lib/data/services/api_service.dart
+  static Future<Map<String, dynamic>> resetPassword({
+  required String irId,
+  required String newPassword,
+}) async {
+  try {
+    debugPrint('Resetting password for IR: $irId');
+    final response = await http.post(
+      Uri.parse('$baseUrl$passwordResetEndpoint'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'ir_id': irId,
+        'new_password': newPassword,
+      }),
+    );
+
+    debugPrint('Password reset response status: ${response.statusCode}');
+    debugPrint('Password reset response body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      try {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Password reset successfully',
+        };
+      } catch (e) {
+        debugPrint('JSON decode error on success: $e');
+        return {
+          'success': true,
+          'message': 'Password reset successfully',
+        };
+      }
+    } else {
+      try {
+        final error = json.decode(response.body);
+        return {
+          'success': false,
+          'message': error['detail'] ?? 'Failed to reset password',
+        };
+      } catch (e) {
+        debugPrint('JSON decode error on failure: $e');
+        return {
+          'success': false,
+          'message': 'Server error (${response.statusCode}): ${response.body}',
+        };
+      }
+    }
+  } catch (e) {
+    debugPrint('Reset password network error: $e');
+    return {
+      'success': false,
+      'message': 'Network error: $e',
+    };
+  }
 }
-
-
+}

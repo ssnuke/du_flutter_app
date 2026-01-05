@@ -43,3 +43,6 @@ const String getTargetsDashboardEndpoint = "/api/targets_dashboard"; // + /{ir_i
 // API Endpoints - UVs
 const String addUvEndpoint = "/api/add_uv"; // + /{ir_id}
 const String getUvEndpoint = "/api/uv_count"; // + /{ir_id}
+
+// API Endpoint - Password Reset
+const String passwordResetEndpoint = '/api/password_reset/'; // + {ir_id}/

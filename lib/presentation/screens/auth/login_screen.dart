@@ -165,13 +165,31 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _login,
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.black)
-                    : const Text("Login"),
+            GestureDetector(
+              onTap: _isLoading ? null : _login,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: _isLoading ? Colors.grey : Colors.cyanAccent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                        )
+                      : const Text(
+                          "Login",
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
               ),
             ),
           ],

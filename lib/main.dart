@@ -136,14 +136,28 @@ class WelcomeScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Image.asset('assets/logo.jpeg', width: 320),
-              ElevatedButton(
-                onPressed: () {
+              GestureDetector(
+                onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const LoginScreen()),
                   );
                 },
-                child: const Text("Login"),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 48),
+                  decoration: BoxDecoration(
+                    color: Colors.cyanAccent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    "Login",
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
               // OutlinedButton(

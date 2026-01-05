@@ -562,11 +562,18 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
                       child: const Text('Cancel'),
                     ),
                     const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _createTeam,
-                      child: _isLoading
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text('Create'),
+                    GestureDetector(
+                      onTap: _isLoading ? null : _createTeam,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                        decoration: BoxDecoration(
+                          color: _isLoading ? Colors.grey : Colors.cyanAccent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                            : const Text('Create', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      ),
                     ),
                   ],
                 ),

@@ -5,6 +5,7 @@ import 'package:leadtracker/presentation/screens/dashboard/dashboard_page.dart';
 import 'package:leadtracker/presentation/screens/teams/managers_page.dart';
 import 'package:leadtracker/presentation/screens/teams/teams_page.dart';
 import 'package:leadtracker/presentation/screens/achievements/achievements_page.dart';
+import 'package:leadtracker/presentation/screens/settings/settings_page.dart';
 import 'package:leadtracker/main.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -93,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _getHomePage(),
       const AchievementsPage(),
       const FAQPage(),
+      SettingsPage(irId: widget.irId, userRole: widget.userRole),
     ];
 
     return PopScope(
@@ -160,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.group),
@@ -168,11 +170,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.emoji_events),
-            label: 'Achievements',
+            label: 'Dream Ticks',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.question_answer),
-            label: 'FAQ',
+            label: 'Coming soon',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Profile Settings',
           ),
         ],
         onTap: (index) => setState(() => _selectedIndex = index),
@@ -205,7 +211,7 @@ class FAQPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text("FAQ Page"));
+    return const Center(child: Text("Something cool will be here soon!"));
   }
 }
 

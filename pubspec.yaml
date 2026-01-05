@@ -45,6 +45,7 @@ dev_dependencies:
     sdk: flutter
 
   flutter_native_splash: ^2.4.4
+  flutter_launcher_icons: ^0.13.1  # Add this line
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -67,6 +68,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/logo.jpeg
+    - assets/data/
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
@@ -95,6 +97,16 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/du_fav_icon.png" 
+
+  # Web favicon
+  web:
+    generate: true
+    image_path: "assets/du_fav_icon.png"
 
 flutter_native_splash:
   color: "#000000"   # background color (use your brand color)

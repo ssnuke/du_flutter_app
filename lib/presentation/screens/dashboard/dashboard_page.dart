@@ -304,8 +304,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   onPressed: isSubmitting ? null : () => Navigator.pop(context),
                   child: const Text('Cancel'),
                 ),
-                ElevatedButton(
-                  onPressed: isSubmitting
+                GestureDetector(
+                  onTap: isSubmitting
                       ? null
                       : () async {
                             if (nameController.text.trim().isEmpty) {
@@ -339,9 +339,16 @@ class _DashboardPageState extends State<DashboardPage> {
                             );
                           }
                         },
-                  child: isSubmitting
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Add'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: isSubmitting ? Colors.grey : Colors.cyanAccent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                        : const Text('Add', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  ),
                 ),
               ],
             );
@@ -428,8 +435,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   onPressed: isSubmitting ? null : () => Navigator.pop(context),
                   child: const Text('Cancel'),
                 ),
-                ElevatedButton(
-                  onPressed: isSubmitting
+                GestureDetector(
+                  onTap: isSubmitting
                       ? null
                       : () async {
                           if (nameController.text.trim().isEmpty) {
@@ -478,10 +485,16 @@ class _DashboardPageState extends State<DashboardPage> {
                             );
                           }
                         },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
-                  child: isSubmitting
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                      : const Text('Add', style: TextStyle(color: Colors.black)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: isSubmitting ? Colors.grey : Colors.amber,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                        : const Text('Add', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  ),
                 ),
               ],
             );
@@ -525,8 +538,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   onPressed: isSubmitting ? null : () => Navigator.pop(dialogContext),
                   child: const Text('Cancel'),
                 ),
-                ElevatedButton(
-                  onPressed: isSubmitting
+                GestureDetector(
+                  onTap: isSubmitting
                       ? null
                       : () async {
                           final rawValue = uvController.text.trim();
@@ -574,14 +587,20 @@ class _DashboardPageState extends State<DashboardPage> {
                             );
                           }
                         },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
-                  child: isSubmitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                        )
-                      : const Text('Save', style: TextStyle(color: Colors.black)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: isSubmitting ? Colors.grey : Colors.orangeAccent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                          )
+                        : const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  ),
                 ),
               ],
             );
@@ -667,8 +686,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   onPressed: isSubmitting ? null : () => Navigator.pop(context),
                   child: const Text('Cancel'),
                 ),
-                ElevatedButton(
-                  onPressed: isSubmitting
+                GestureDetector(
+                  onTap: isSubmitting
                       ? null
                       : () async {
                           if (nameController.text.trim().isEmpty) {
@@ -702,9 +721,16 @@ class _DashboardPageState extends State<DashboardPage> {
                             );
                           }
                         },
-                  child: isSubmitting
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Save'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: isSubmitting ? Colors.grey : Colors.cyanAccent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                        : const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  ),
                 ),
               ],
             );
@@ -795,7 +821,20 @@ class _DashboardPageState extends State<DashboardPage> {
                     children: [
                       Text(_error, style: const TextStyle(color: Colors.white70)),
                       const SizedBox(height: 16),
-                      ElevatedButton(onPressed: _fetchLeads, child: const Text('Retry')),
+                      GestureDetector(
+                        onTap: _fetchLeads,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                          decoration: BoxDecoration(
+                            color: Colors.cyanAccent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Retry',
+                            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 )
@@ -1161,8 +1200,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   onPressed: isSubmitting ? null : () => Navigator.pop(context),
                   child: const Text('Cancel'),
                 ),
-                ElevatedButton(
-                  onPressed: isSubmitting
+                GestureDetector(
+                  onTap: isSubmitting
                       ? null
                       : () async {
                           if (commentController.text.trim().isEmpty) {
@@ -1206,13 +1245,19 @@ class _DashboardPageState extends State<DashboardPage> {
                             );
                           }
                         },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
-                  child: isSubmitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                      : const Text('Update', style: TextStyle(color: Colors.black)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: isSubmitting ? Colors.grey : Colors.amber,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                        : const Text('Update', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  ),
                 ),
               ],
             );
