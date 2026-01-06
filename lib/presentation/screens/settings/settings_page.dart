@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:leadtracker/core/constants/access_levels.dart';
 import 'package:leadtracker/data/services/api_service.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -35,18 +36,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   String _getRoleName() {
-    switch (widget.userRole) {
-      case 1:
-        return 'Super Admin';
-      case 2:
-        return 'LDC';
-      case 3:
-        return 'LS';
-      case 4:
-        return 'IR';
-      default:
-        return 'User';
-    }
+    return AccessLevel.getRoleName(widget.userRole);
   }
 
   Future<void> _handlePasswordReset() async {
@@ -117,10 +107,7 @@ class _SettingsPageState extends State<SettingsPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF121212),
         title: const Text('Settings'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading: false,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

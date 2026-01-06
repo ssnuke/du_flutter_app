@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:leadtracker/core/constants/access_levels.dart';
 import 'package:leadtracker/presentation/screens/admin/add_members_page.dart';
 import 'package:leadtracker/presentation/screens/dashboard/dashboard_page.dart';
 import 'package:leadtracker/presentation/screens/teams/managers_page.dart';
@@ -21,22 +22,15 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   Key _homePageKey = UniqueKey();
 
-  bool get isSuperAdmin => widget.userRole == 1;
-  bool get isManager => widget.userRole <= 2;
+  // Role-based access checks using AccessLevel utility
+  bool get hasFullAccess => AccessLevel.hasFullAccess(widget.userRole);
+  bool get canManageTeams => AccessLevel.canManageTeams(widget.userRole);
+  bool get canViewTeams => AccessLevel.canViewTeams(widget.userRole);
+  bool get canAccessAdminPanel => AccessLevel.canAccessAdminPanel(widget.userRole);
+  bool get isViewOnly => AccessLevel.isViewOnly(widget.userRole);
 
   String _getRoleName() {
-    switch (widget.userRole) {
-      case 1:
-        return 'Super Admin';
-      case 2:
-        return 'LDC';
-      case 3:
-        return 'LS';
-      case 4:
-        return 'IR';
-      default:
-        return 'User';
-    }
+    return AccessLevel.getRoleName(widget.userRole);
   }
 
   void _refreshHomePage() {
@@ -46,9 +40,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _getHomePage() {
-    if (isSuperAdmin) {
+    // ADMIN/CTC: See all managers (ManagersPage)
+    // LDC/LS/GC/IR: See teams they belong to (TeamsPage)
+    // GC/IR will have restricted access - can only see their own data in team members
+    if (hasFullAccess) {
       return ManagersPage(key: _homePageKey, irId: widget.irId, userRole: widget.userRole);
     } else {
+      // LDC, LS, GC, IR all see TeamsPage
+      // Permissions are handled within TeamsPage and TeamMembersPage
       return TeamsPage(key: _homePageKey, irId: widget.irId, userRole: widget.userRole);
     }
   }
@@ -90,12 +89,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Build different pages based on role
     final List<Widget> pages = [
       _getHomePage(),
       const AchievementsPage(),
       const FAQPage(),
       SettingsPage(irId: widget.irId, userRole: widget.userRole),
     ];
+
+    // Different bottom nav labels based on role
+    final String firstTabLabel = isViewOnly ? 'My Dashboard' : 'Teams';
 
     return PopScope(
       canPop: false,
@@ -163,27 +166,28 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         type: BottomNavigationBarType.fixed,
-        items: const [
+        items: [
           BottomNavigationBarItem(
-            icon: Icon(Icons.group),
-            label: 'Teams',
+            icon: Icon(isViewOnly ? Icons.dashboard : Icons.group),
+            label: firstTabLabel,
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.emoji_events),
             label: 'Dream Ticks',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.question_answer),
             label: 'Coming soon',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: 'Profile Settings',
           ),
         ],
         onTap: (index) => setState(() => _selectedIndex = index),
       ),
-      floatingActionButton: widget.userRole <= 3 && _selectedIndex == 0
+      // Only show FAB for ADMIN, CTC, LDC (canAccessAdminPanel)
+      floatingActionButton: canAccessAdminPanel && _selectedIndex == 0
           ? FloatingActionButton(
               onPressed: () {
                 showDialog(

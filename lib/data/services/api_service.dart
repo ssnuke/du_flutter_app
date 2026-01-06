@@ -7,19 +7,25 @@ class ApiService {
   // ==================== TEAM OPERATIONS ====================
 
   /// Create a new team
-  /// Based on Postman: POST /api/create_team with {"name": "TeamName"}
-  static Future<Map<String, dynamic>> createTeam(String teamName) async {
+  /// Based on Postman: POST /api/create_team with {"name": "TeamName", "ir_id": "IR123"}
+  static Future<Map<String, dynamic>> createTeam(String teamName, String irId) async {
     try {
       final url = Uri.parse('$baseUrl$createTeamEndpoint');
-      print('Creating team at: $url with name: $teamName');
+      print('Creating team at: $url');
+      print('Team name: "$teamName"');
+      print('IR ID: "$irId"');
 
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'name': teamName}),
+        body: jsonEncode({
+          'name': teamName,
+          'ir_id': irId,
+        }),
       );
 
-      print('Create team response: ${response.statusCode} - ${response.body}');
+      print('Create team response: ${response.statusCode}');
+      print('Response body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true, 'data': jsonDecode(response.body)};
@@ -690,4 +696,76 @@ class ApiService {
     };
   }
 }
+
+  /// Change IR Access Level
+  /// Based on API: POST /api/change_access_level/
+  /// Requires: acting_ir_id, target_ir_id, new_access_level (1-6)
+  /// Access levels: 1=Admin, 2=CTC, 3=LDC, 4=LS, 5=GC, 6=IR
+  static Future<Map<String, dynamic>> changeAccessLevel({
+    required String actingIrId,
+    required String targetIrId,
+    required int newAccessLevel,
+  }) async {
+    // NOTE: This endpoint is not yet implemented on the backend    
+    try {
+      final url = Uri.parse('$baseUrl/api/change_access_level/');
+      debugPrint('Changing access level at: $url');
+      debugPrint('Acting IR: $actingIrId, Target IR: $targetIrId, New Level: $newAccessLevel');
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'acting_ir_id': actingIrId,
+          'target_ir_id': targetIrId,
+          'new_access_level': newAccessLevel,
+        }),
+      );
+
+      debugPrint('Change access level response: ${response.statusCode} - ${response.body}');
+
+      if (response.statusCode == 200) {
+        try {
+          final data = json.decode(response.body);
+          return {
+            'success': true,
+            'message': data['message'] ?? 'Access level changed successfully',
+            'target_ir_id': data['target_ir_id'],
+            'target_ir_name': data['target_ir_name'],
+            'old_access_level': data['old_access_level'],
+            'new_access_level': data['new_access_level'],
+            'changed_by': data['changed_by'],
+          };
+        } catch (e) {
+          debugPrint('JSON decode error on success: $e');
+          return {
+            'success': true,
+            'message': 'Access level changed successfully',
+          };
+        }
+      } else {
+        try {
+          final error = json.decode(response.body);
+          return {
+            'success': false,
+            'error': error['detail'] ?? 'Failed to change access level',
+          };
+        } catch (e) {
+          debugPrint('JSON decode error on failure: $e');
+          return {
+            'success': false,
+            'error': 'Server error (${response.statusCode}): ${response.body}',
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('Change access level network error: $e');
+      return {
+        'success': false,
+        'error': 'Network error: $e',
+      };
+    }
+   
+  }
+
 }

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 import 'package:leadtracker/core/constants/api_constants.dart';
+import 'package:leadtracker/core/constants/access_levels.dart';
 import 'package:leadtracker/presentation/screens/home/home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -63,11 +64,11 @@ class _LoginScreenState extends State<LoginScreen> {
           final String name = ir['ir_name'] ?? '';
           final String email = ir['ir_email'] ?? '';
           final String startedDate = ir['started_date'] ?? '';
-          final int accessLevel = ir['ir_access_level'] ?? 4;
+          final int accessLevel = ir['ir_access_level'] ?? AccessLevel.ir;
 
           print("✅ Login Success");
           print(
-              "🧠 IR ID: $id | Name: $name | Email: $email | Role Level: $accessLevel");
+              "🧠 IR ID: $id | Name: $name | Email: $email | Role: ${AccessLevel.getRoleName(accessLevel)} (Level $accessLevel)");
 
           // Save login state to SharedPreferences
           final prefs = await SharedPreferences.getInstance();
@@ -109,7 +110,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Login")),
+      appBar: AppBar(
+        title: const Text("Login"),
+        automaticallyImplyLeading: false,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(

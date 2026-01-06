@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import 'package:leadtracker/core/constants/access_levels.dart';
 import 'package:leadtracker/presentation/screens/dashboard/dashboard_page.dart';
 import 'package:leadtracker/presentation/widgets/info_card.dart';
 import 'package:leadtracker/data/services/api_service.dart';
@@ -58,10 +59,11 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
   int currentWeekNumber = 0;
   int currentYear = 0;
   
-
-  bool get isManager => widget.userRole <= 2;
-  bool get isTeamLead => widget.userRole == 3;
-  bool get canSetTargets => widget.userRole <= 3;
+  // Role-based permission checks using AccessLevel utility
+  bool get hasFullAccess => AccessLevel.hasFullAccess(widget.userRole);
+  bool get canManageTeams => AccessLevel.canManageTeams(widget.userRole);
+  bool get canSetTargets => AccessLevel.canManageTeams(widget.userRole);
+  bool get canAddDataForOthers => AccessLevel.canAddDataForOthers(widget.userRole);
 
   int get totalTeamCalls => memberLeadCounts.values.fold(0, (sum, count) => sum + count);
 
@@ -326,7 +328,8 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
   }
 
   void _onMemberTap(String irId) {
-    final bool canViewOthers = widget.userRole <= 3;
+    // LS (level 4) and above can view team members' dashboards
+    final bool canViewOthers = widget.userRole <= 4;
 
     if (canViewOthers || irId == widget.loggedInIrId) {
       Navigator.push(
@@ -451,15 +454,19 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
                           final member = members[index];
                           final String memberId = (member['ir_id'] ?? member['ir'] ?? '').toString();
                           final String displayName = (member['ir_name'] ?? member['ir'] ?? memberId).toString();
-                          final int roleNum = member['role_num'] ?? 5;
+                          // Use ir_access_level (actual access level) if available, fallback to role_num
+                          final int memberAccessLevel = member['ir_access_level'] ?? member['role_num'] ?? 6;
                           final bool isOwnProfile = memberId.isNotEmpty && memberId == widget.loggedInIrId;
 
                           final int leadCount = memberLeadCounts[memberId] ?? 0;
                           final int planCount = memberPlanCounts[memberId] ?? 0;
                           final int uvCount = memberUvCounts[memberId] ?? 0;
 
-                          final bool canTap = widget.userRole <= 3 || isOwnProfile;
-                          final bool shouldHideStats = widget.userRole == 4 && !isOwnProfile;
+                          // LS (level 4) and above can tap on team members
+                          // GC/IR (level 5-6) can only tap on their own profile
+                          final bool canTap = widget.userRole <= 4 || isOwnProfile;
+                          // GC/IR (level 5-6) can only see stats for own profile
+                          final bool shouldHideStats = widget.userRole >= 5 && !isOwnProfile;
 
                           return Opacity(
                             opacity: canTap ? 1.0 : 0.5,
@@ -470,9 +477,8 @@ class _TeamMembersPageState extends State<TeamMembersPage> {
                               totalTurnover: uvCount.toDouble(),
                               clientMeetings: planCount,
                               targetMeetings: 0,
-                              isManager: roleNum == 2,
-                              isLead: roleNum == 3,
-                              onTap: canTap ? () => _onMemberTap(memberId) : () {},
+                              accessLevel: memberAccessLevel,  // Use actual access level for proper badge display
+                              onTap: canTap ? () => _onMemberTap(memberId) : null,  // No action for GC/IR on others
                               hideStats: shouldHideStats,
                               showMemberFormat: true,
                               // no trailing action here; dashboard FAB is shown on the member's DashboardPage

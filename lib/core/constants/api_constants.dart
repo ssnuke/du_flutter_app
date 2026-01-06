@@ -6,6 +6,7 @@ const String baseUrl = "https://du-backend-dj.onrender.com";
 const String createIrEndpoint = "/api/add_ir_id/";
 const String registerIrEndpoint = "/api/register_new_ir/";
 const String loginIrEndpoint = "/api/login/";
+const String getIrDetailsEndpoint = "/api/ir"; // + /{ir_id}/
 
 // API Endpoints - Teams
 const String getTeamsEndpoint = "/api/teams/";
@@ -34,6 +35,7 @@ const String getLdcsEndpoint = "/api/ldcs/";
 const String getTeamsByLdcEndpoint = "/api/teams_by_ldc"; // + /{ir_id}
 const String getTeamsByIrEndpoint = "/api/teams_by_ir"; // + /{ir_id}
 const String getAllIrsEndpoint = "/api/irs/"; // Get all registered IRs
+const String getVisibleTeamsEndpoint = "/api/visible_teams"; // + /{ir_id} - Get all teams visible to an IR based on role/hierarchy
 
 // API Endpoints - Targets
 const String setTargetsEndpoint = "/api/set_targets/";
@@ -46,3 +48,6 @@ const String getUvEndpoint = "/api/uv_count"; // + /{ir_id}
 
 // API Endpoint - Password Reset
 const String passwordResetEndpoint = '/api/password_reset/'; // + {ir_id}/
+
+// API Endpoint - Change Access Level (NOTE: Endpoint needs to be implemented on backend first)
+const String changeAccessLevels = '/api/change_access_level/'; 

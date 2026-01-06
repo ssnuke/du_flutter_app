@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:leadtracker/core/constants/access_levels.dart';
 import 'package:leadtracker/data/services/api_service.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -39,10 +40,50 @@ class _DashboardPageState extends State<DashboardPage> {
   double totalTurnover = 0;
   int totalMeetings = 0;
 
+  // Role-based permission checks
   bool get isOwnDashboard => widget.irId == widget.loggedInIrId;
-  bool get canAddLead => widget.userRole == 1 || isOwnDashboard;
-  bool get canAddPlan => widget.userRole == 1 || isOwnDashboard;
-  bool get canEdit => widget.userRole == 1;
+  
+  /// Can add leads/plans:
+  /// - ADMIN/CTC: Can add for anyone
+  /// - LDC: Can add for members of teams they manage
+  /// - LS: Can add for team members
+  /// - GC/IR: Can add only for themselves
+  bool get canAddLead => AccessLevel.canAddDataFor(
+    actorLevel: widget.userRole,
+    actorId: widget.loggedInIrId,
+    targetId: widget.irId,
+  );
+  
+  bool get canAddPlan => AccessLevel.canAddDataFor(
+    actorLevel: widget.userRole,
+    actorId: widget.loggedInIrId,
+    targetId: widget.irId,
+  );
+  
+  /// Can edit existing leads/plans:
+  /// - ADMIN/CTC: Can edit anyone's data
+  /// - LDC: Can edit team members' data
+  /// - LS: Can edit team members' data
+  /// - GC/IR: Can only edit own data
+  bool get canEdit => AccessLevel.canEditUser(
+    actorLevel: widget.userRole,
+    actorId: widget.loggedInIrId,
+    targetId: widget.irId,
+  );
+  
+  /// Can delete leads/plans:
+  /// - ADMIN/CTC: Can delete anyone's data
+  /// - LDC: Can delete team members' data
+  /// - LS: Can delete team members' data
+  /// - GC/IR: Can only delete own data
+  bool get canDelete => AccessLevel.canEditUser(
+    actorLevel: widget.userRole,
+    actorId: widget.loggedInIrId,
+    targetId: widget.irId,
+  );
+  
+  /// GC/IR viewing their own dashboard - view only mode
+  bool get isViewOnlyMode => AccessLevel.isViewOnly(widget.userRole) && !isOwnDashboard;
 
   @override
   void initState() {
@@ -992,7 +1033,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                                 ],
                                               ),
                                             ),
-                                            if (canAddLead)
+                                            if (canEdit)
                                               IconButton(
                                                 icon: const Icon(Icons.edit, color: Colors.cyanAccent, size: 20),
                                                 onPressed: () => _showEditLeadDialog(lead),
@@ -1070,7 +1111,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                                 ],
                                               ),
                                             ),
-                                            if (canAddPlan)
+                                            if (canEdit)
                                               IconButton(
                                                 icon: const Icon(Icons.edit, color: Colors.amber, size: 20),
                                                 onPressed: () => _showEditPlanDialog(plan),

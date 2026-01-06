@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:leadtracker/core/constants/api_constants.dart';
 import 'package:leadtracker/presentation/screens/auth/login_screen.dart';
 import 'package:leadtracker/presentation/screens/auth/signup_screen.dart';
 import 'package:leadtracker/presentation/screens/home/home_screen.dart';
@@ -85,12 +88,47 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (mounted) {
       if (isLoggedIn && irId.isNotEmpty) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => HomeScreen(irId: irId, userRole: userRole),
-          ),
-        );
+        // Fetch latest user role from backend to ensure badge is up-to-date
+        try {
+          final response = await http.get(
+            Uri.parse('$baseUrl/api/ir/$irId/'),
+          );
+          
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body);
+            final latestAccessLevel = data['ir_access_level'] ?? userRole;
+            
+            // Update stored role if it changed
+            if (latestAccessLevel != userRole) {
+              await prefs.setInt('userRole', latestAccessLevel);
+              print('✅ User role updated: $userRole -> $latestAccessLevel');
+            }
+            
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => HomeScreen(irId: irId, userRole: latestAccessLevel),
+              ),
+            );
+          } else {
+            // If API call fails, use stored role
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => HomeScreen(irId: irId, userRole: userRole),
+              ),
+            );
+          }
+        } catch (e) {
+          print('⚠️ Failed to fetch latest user role: $e');
+          // If API call fails, use stored role
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => HomeScreen(irId: irId, userRole: userRole),
+            ),
+          );
+        }
       } else {
         Navigator.pushReplacement(
           context,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import 'package:leadtracker/core/constants/access_levels.dart';
 import 'package:leadtracker/presentation/screens/teams/team_members_page.dart';
 import 'package:leadtracker/presentation/widgets/info_card.dart';
 import 'package:leadtracker/data/models/team_model.dart';
@@ -31,58 +32,72 @@ class _TeamsPageState extends State<TeamsPage> {
   Map<String, int> teamTotalCalls = {};
   bool isLoading = true;
   String errorMessage = '';
+  int? currentWeekNumber;
+  int? currentYear;
+
+  // Role-based checks
+  bool get hasFullAccess => AccessLevel.hasFullAccess(widget.userRole);
+  bool get canManageTeams => AccessLevel.canManageTeams(widget.userRole);
 
   @override
   void initState() {
     super.initState();
-    _fetchTeams();
+    _fetchVisibleTeams();
   }
 
-  Future<void> _fetchTeams() async {
+  /// Fetches all visible teams using the hierarchy-based visible_teams API
+  /// Teams created by the logged-in user appear first, followed by other teams in their subtree
+  Future<void> _fetchVisibleTeams() async {
     setState(() {
       isLoading = true;
       errorMessage = '';
     });
 
-    final endpoint = widget.userRole >= 3
-        ? '$getTeamsByIrEndpoint/${widget.irId}'
-        : '$getTeamsByLdcEndpoint/${widget.irId}';
-
-    final url = Uri.parse('$baseUrl$endpoint');
+    // Use the new visible_teams endpoint for all roles
+    final url = Uri.parse('$baseUrl$getVisibleTeamsEndpoint/${widget.irId}');
 
     try {
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> teamsJson = responseData['teams'] ?? [];
+        
+        // Store week info from response
+        currentWeekNumber = responseData['week_number'];
+        currentYear = responseData['year'];
 
         // preserve previous non-zero target values to avoid overwriting with 0
         final previousTargets = {for (var t in teamData) t.id: t};
 
-        final List<Team> fetched = data.map((item) => Team.fromJson(item)).toList();
+        final List<Team> fetched = teamsJson.map((item) => Team.fromJson(item)).toList();
+
+        // Sort teams: Teams created by logged-in user first, then others
+        fetched.sort((a, b) {
+          final aIsOwn = a.createdById == widget.irId;
+          final bIsOwn = b.createdById == widget.irId;
+          
+          // Own teams first
+          if (aIsOwn && !bIsOwn) return -1;
+          if (!aIsOwn && bIsOwn) return 1;
+          
+          // Within same category, sort by name
+          return a.name.compareTo(b.name);
+        });
 
         final merged = fetched.map((t) {
           final prev = previousTargets[t.id];
           if (prev != null) {
-            final info = (t.weeklyInfoTarget == 0 && prev.weeklyInfoTarget != 0) ? prev.weeklyInfoTarget : t.weeklyInfoTarget;
-            final plan = (t.weeklyPlanTarget == 0 && prev.weeklyPlanTarget != 0) ? prev.weeklyPlanTarget : t.weeklyPlanTarget;
-            final uv = (t.weeklyUvTarget == 0 && prev.weeklyUvTarget != 0) ? prev.weeklyUvTarget : t.weeklyUvTarget;
-            final infoProgress = (t.infoProgress == 0 && prev.infoProgress != 0) ? prev.infoProgress : t.infoProgress;
-            final planProgress = (t.planProgress == 0 && prev.planProgress != 0) ? prev.planProgress : t.planProgress;
-            final uvProgress = (t.uvProgress == 0 && prev.uvProgress != 0) ? prev.uvProgress : t.uvProgress;
-            final weekNumber = t.weekNumber != 0 ? t.weekNumber : prev.weekNumber;
-            final year = t.year != 0 ? t.year : prev.year;
-            return Team(
-              name: t.name,
-              id: t.id,
-              weeklyInfoTarget: info,
-              weeklyPlanTarget: plan,
-              weeklyUvTarget: uv,
-              infoProgress: infoProgress,
-              planProgress: planProgress,
-              uvProgress: uvProgress,
-              weekNumber: weekNumber,
-              year: year,
+            // Merge with previous non-zero values
+            return t.copyWith(
+              weeklyInfoTarget: (t.weeklyInfoTarget == 0 && prev.weeklyInfoTarget != 0) ? prev.weeklyInfoTarget : t.weeklyInfoTarget,
+              weeklyPlanTarget: (t.weeklyPlanTarget == 0 && prev.weeklyPlanTarget != 0) ? prev.weeklyPlanTarget : t.weeklyPlanTarget,
+              weeklyUvTarget: (t.weeklyUvTarget == 0 && prev.weeklyUvTarget != 0) ? prev.weeklyUvTarget : t.weeklyUvTarget,
+              infoProgress: (t.infoProgress == 0 && prev.infoProgress != 0) ? prev.infoProgress : t.infoProgress,
+              planProgress: (t.planProgress == 0 && prev.planProgress != 0) ? prev.planProgress : t.planProgress,
+              uvProgress: (t.uvProgress == 0 && prev.uvProgress != 0) ? prev.uvProgress : t.uvProgress,
+              weekNumber: t.weekNumber != 0 ? t.weekNumber : prev.weekNumber,
+              year: t.year != 0 ? t.year : prev.year,
             );
           }
           return t;
@@ -92,8 +107,9 @@ class _TeamsPageState extends State<TeamsPage> {
           teamData = merged;
           isLoading = false;
         });
-        // Fetch per-team targets (if stored separately) and then compute totals.
-        debugPrint('Teams fetched: ${teamData.length} items');
+        
+        debugPrint('Visible teams fetched: ${teamData.length} items');
+        // Optionally fetch additional details
         await _fetchTargetsForTeams();
         await _fetchTeamTotalCalls();
       } else {
@@ -278,7 +294,7 @@ class _TeamsPageState extends State<TeamsPage> {
                     ),
                     const SizedBox(height: 16),
                     GestureDetector(
-                      onTap: _fetchTeams,
+                      onTap: _fetchVisibleTeams,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
                         decoration: BoxDecoration(
@@ -307,14 +323,14 @@ class _TeamsPageState extends State<TeamsPage> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Contact your manager to be added to a team',
+                          'Contact your LDC to be added to a team',
                           style: TextStyle(fontSize: 14, color: Colors.grey),
                         ),
                       ],
                     ),
                   )
                 : RefreshIndicator(
-                    onRefresh: _fetchTeams,
+                    onRefresh: _fetchVisibleTeams,
                     child: ListView.builder(
                       padding: const EdgeInsets.only(bottom: 80),
                       itemCount: teamData.length,
@@ -323,6 +339,10 @@ class _TeamsPageState extends State<TeamsPage> {
                         final int actualCalls = team.infoProgress != 0
                             ? team.infoProgress
                             : (teamTotalCalls[team.id] ?? 0);
+                        
+                        // Check if this team was created by the logged-in user
+                        final isOwnTeam = team.createdById == widget.irId;
+                        
                         return InfoCard(
                           managerName: team.name,
                           totalCalls: actualCalls,
@@ -332,6 +352,8 @@ class _TeamsPageState extends State<TeamsPage> {
                           clientMeetings: team.planProgress,
                           targetMeetings: team.weeklyPlanTarget,
                           isTeam: true,
+                          isOwnTeam: isOwnTeam,
+                          createdByName: team.createdByName,
                           onTap: () {
                             Navigator.push(
                               context,
@@ -353,7 +375,7 @@ class _TeamsPageState extends State<TeamsPage> {
                               ),
                             ).then((_) {
                               // Re-fetch full team list (including weekly targets)
-                              _fetchTeams();
+                              _fetchVisibleTeams();
                               _fetchTeamTotalCalls();
                             });
                           },

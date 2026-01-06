@@ -75,6 +75,52 @@
       document.body.style.background = "transparent";
     }
   </script>
+  
+  <!-- Force Update Check - Runs before app loads -->
+  <script>
+    (function() {
+      'use strict';
+      
+      // Check version.json for updates (Flutter generates this with each build)
+      async function checkForUpdates() {
+        try {
+          // Fetch version.json with cache-busting
+          const response = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+          if (!response.ok) return;
+          
+          const serverVersion = await response.json();
+          const cachedVersion = localStorage.getItem('app_version');
+          const serverVersionStr = JSON.stringify(serverVersion);
+          
+          if (cachedVersion && cachedVersion !== serverVersionStr) {
+            console.log('[PWA] New version detected via version.json');
+            localStorage.setItem('app_version', serverVersionStr);
+            
+            // Clear caches and reload
+            if ('caches' in window) {
+              const cacheNames = await caches.keys();
+              await Promise.all(cacheNames.map(name => caches.delete(name)));
+              console.log('[PWA] Caches cleared');
+            }
+            
+            // Force reload from server
+            window.location.reload(true);
+            return;
+          }
+          
+          // Store version if first time
+          if (!cachedVersion) {
+            localStorage.setItem('app_version', serverVersionStr);
+          }
+        } catch (e) {
+          console.log('[PWA] Version check failed:', e);
+        }
+      }
+      
+      // Run version check immediately
+      checkForUpdates();
+    })();
+  </script>
 </head>
 
 <body>
@@ -90,13 +136,82 @@
 
   <script src="flutter_bootstrap.js" async></script>
 
-  <!-- Service Worker Registration -->
+  <!-- Force Auto-Update Service Worker -->
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('flutter_service_worker.js');
+    (function() {
+      'use strict';
+      
+      if (!('serviceWorker' in navigator)) return;
+      
+      let refreshing = false;
+      
+      // Listen for controller change (new service worker activated)
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        console.log('[PWA] New version detected, reloading...');
+        window.location.reload();
       });
-    }
+      
+      window.addEventListener('load', async function() {
+        try {
+          const registration = await navigator.serviceWorker.register('flutter_service_worker.js');
+          console.log('[PWA] Service Worker registered');
+          
+          // Check for updates immediately on page load
+          registration.update();
+          
+          // Check for updates periodically (every 60 seconds)
+          setInterval(() => {
+            registration.update();
+          }, 60 * 1000);
+          
+          // Handle updates found
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            console.log('[PWA] Update found, installing...');
+            
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // New version available - force it to activate immediately
+                console.log('[PWA] New version installed, activating...');
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          });
+          
+          // If there's already a waiting worker, activate it
+          if (registration.waiting) {
+            console.log('[PWA] Found waiting worker, activating...');
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+          
+        } catch (error) {
+          console.error('[PWA] Service Worker registration failed:', error);
+        }
+      });
+      
+      // Also check for updates when the page becomes visible (user returns to tab)
+      document.addEventListener('visibilitychange', async () => {
+        if (document.visibilityState === 'visible') {
+          const registration = await navigator.serviceWorker.getRegistration();
+          if (registration) {
+            console.log('[PWA] Page visible, checking for updates...');
+            registration.update();
+          }
+        }
+      });
+      
+      // Check for updates when coming back online
+      window.addEventListener('online', async () => {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+          console.log('[PWA] Back online, checking for updates...');
+          registration.update();
+        }
+      });
+      
+    })();
   </script>
 </body>
 
