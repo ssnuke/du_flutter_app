@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:leadtracker/core/constants/access_levels.dart';
+import 'package:leadtracker/core/constants/api_constants.dart';
 import 'package:leadtracker/data/services/api_service.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -23,10 +26,6 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  String _selectedFilter = 'Weekly';
-  DateTimeRange? _weekRange;
-  DateTime? _selectedMonth;
-
   List<Map<String, dynamic>> _leads = [];
   List<Map<String, dynamic>> _filteredLeads = [];
   List<Map<String, dynamic>> _plans = [];
@@ -35,6 +34,16 @@ class _DashboardPageState extends State<DashboardPage> {
   String _error = '';
   String _selectedTab = 'Infos';
   bool _plansLoaded = false;
+  String? _selectedPlanStatusFilter; // null means 'All'
+  String? _selectedInfoResponseFilter; // null means 'All'
+  
+  // Week filter state
+  int? selectedWeekNumber;
+  int? selectedYear;
+  List<Map<String, dynamic>> availableWeeks = [];
+  bool isLoadingWeeks = false;
+  int? currentWeekNumber;
+  int? currentYear;
 
   int totalCalls = 0;
   double totalTurnover = 0;
@@ -88,67 +97,136 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
-    _setDefaultWeekRange();
-    _fetchPlans();
-    _fetchLeads();
-    _fetchUvCount();
+    _fetchAvailableWeeks();
   }
 
 
 
-  void _setDefaultWeekRange() {
-    final today = DateTime.now();
-    final lastFriday = today.subtract(Duration(days: (today.weekday + 1) % 7));
-    final nextFriday = lastFriday.add(const Duration(days: 7));
-    _weekRange = DateTimeRange(start: lastFriday, end: nextFriday);
+  /// Fetches available weeks from the backend
+  Future<void> _fetchAvailableWeeks() async {
+    setState(() {
+      isLoadingWeeks = true;
+    });
+
+    try {
+      final url = Uri.parse('$baseUrl/api/available_weeks/');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> weeks = responseData['weeks'] ?? [];
+        
+        setState(() {
+          availableWeeks = weeks.cast<Map<String, dynamic>>();
+          currentWeekNumber = responseData['current_week'];
+          currentYear = responseData['current_year'];
+          // Set selected to current week initially
+          selectedWeekNumber = currentWeekNumber;
+          selectedYear = currentYear;
+          isLoadingWeeks = false;
+        });
+        
+        // Fetch data after weeks are loaded
+        await _fetchLeads();
+        await _fetchPlans();
+        await _fetchUvCount();
+      } else {
+        setState(() {
+          isLoadingWeeks = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching available weeks: $e');
+      setState(() {
+        isLoadingWeeks = false;
+      });
+    }
   }
 
   Future<void> _fetchLeads() async {
+    if (selectedWeekNumber == null || selectedYear == null) {
+      debugPrint('Cannot fetch leads: week or year not set');
+      return;
+    }
+    
     setState(() {
       _isLoading = true;
       _error = '';
     });
 
-    final result = await ApiService.getInfoDetails(widget.irId);
+    try {
+      final result = await ApiService.getInfoDetails(
+        widget.irId,
+        response: _selectedInfoResponseFilter,
+        week: selectedWeekNumber,
+        year: selectedYear,
+      );
 
-    if (result['success']) {
-      final List<dynamic> data = result['data'] ?? [];
+      if (result['success']) {
+        final List<dynamic> data = result['data'] ?? [];
+        setState(() {
+          _leads = data.map((item) {
+            return {
+              'id': item['id'],
+              'name': item['info_name'] ?? 'Unknown',
+              'date': DateTime.tryParse(item['info_date'] ?? '') ?? DateTime.now(),
+              'status': item['response'] ?? 'N/A',
+              'comments': item['comments'] ?? '',
+            };
+          }).toList();
+          _filteredLeads = _leads; // When using week filter, all leads are already filtered
+          _isLoading = false;
+          totalCalls = _leads.length;
+        });
+      } else {
+        debugPrint('Failed to fetch leads: ${result['error']}');
+        setState(() {
+          _error = result['error'] ?? 'Failed to fetch leads';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error in _fetchLeads: $e');
       setState(() {
-        _leads = data.map((item) {
-          return {
-            'id': item['id'],
-            'name': item['info_name'] ?? 'Unknown',
-            'date': DateTime.tryParse(item['info_date'] ?? '') ?? DateTime.now(),
-            'status': item['response'] ?? 'N/A',
-            'comments': item['comments'] ?? '',
-          };
-        }).toList();
-        _isLoading = false;
-      });
-      _calculateAggregatedData();
-    } else {
-      setState(() {
-        _error = result['error'] ?? 'Failed to fetch leads';
+        _error = 'Error fetching leads: $e';
         _isLoading = false;
       });
     }
   }
 
   Future<void> _fetchPlans() async {
-    final result = await ApiService.getPlanDetails(widget.irId);
+    if (selectedWeekNumber == null || selectedYear == null) {
+      debugPrint('Cannot fetch plans: week or year not set');
+      return;
+    }
+    
+    try {
+      final result = await ApiService.getPlanDetails(
+        widget.irId,
+        status: _selectedPlanStatusFilter,
+        week: selectedWeekNumber,
+        year: selectedYear,
+      );
 
-    if (result['success']) {
-      final List<dynamic> data = result['data'] ?? [];
-      setState(() {
-        _plans = data.map((item) {
-          return {
-            'id': item['id'],
-            'prospect_name': item['plan_name'] ?? 'Unknown',
-            'date': DateTime.tryParse(item['plan_date'] ?? '') ?? DateTime.now(),
-            'comments': item['comments'] ?? '',
-          };
-        }).toList();        _plansLoaded = true;      });
-      _calculateAggregatedData();
+      if (result['success']) {
+        final List<dynamic> data = result['data'] ?? [];
+        setState(() {
+          _plans = data.map((item) {
+            return {
+              'id': item['id'],
+              'prospect_name': item['plan_name'] ?? 'Unknown',
+              'date': DateTime.tryParse(item['plan_date'] ?? '') ?? DateTime.now(),
+              'comments': item['comments'] ?? '',
+              'status': item['status'] ?? 'closing_pending',
+            };
+          }).toList();
+          _filteredPlans = _plans; // When using week filter, all plans are already filtered
+          _plansLoaded = true;
+          totalMeetings = _plans.length;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error in _fetchPlans: $e');
     }
   }
 
@@ -197,82 +275,94 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  void _calculateAggregatedData() {
-    List<Map<String, dynamic>> filteredLeads;
-    List<Map<String, dynamic>> filteredPlans;
 
-    if (_selectedFilter == 'Weekly' && _weekRange != null) {
-      filteredLeads = _leads.where((entry) {
-        final date = entry['date'] as DateTime;
-        return date.isAfter(_weekRange!.start.subtract(const Duration(days: 1))) &&
-            date.isBefore(_weekRange!.end.add(const Duration(days: 1)));
-      }).toList();
-      filteredPlans = _plans.where((entry) {
-        final date = entry['date'] as DateTime;
-        return date.isAfter(_weekRange!.start.subtract(const Duration(days: 1))) &&
-            date.isBefore(_weekRange!.end.add(const Duration(days: 1)));
-      }).toList();
-    } else if (_selectedFilter == 'Monthly' && _selectedMonth != null) {
-      filteredLeads = _leads.where((entry) {
-        final date = entry['date'] as DateTime;
-        return date.year == _selectedMonth!.year && date.month == _selectedMonth!.month;
-      }).toList();
-      filteredPlans = _plans.where((entry) {
-        final date = entry['date'] as DateTime;
-        return date.year == _selectedMonth!.year && date.month == _selectedMonth!.month;
-      }).toList();
-    } else {
-      filteredLeads = _leads;
-      filteredPlans = _plans;
-    }
 
-    setState(() {
-      _filteredLeads = filteredLeads;
-      _filteredPlans = filteredPlans;
-      totalCalls = filteredLeads.length;
-      totalMeetings = filteredPlans.length;
-    });
-  }
-
-  void _pickWeekRange() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      initialDateRange: _weekRange,
-      firstDate: DateTime(2023),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+  Widget _buildWeekFilter() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const Text(
+            'Week: ',
+            style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+              ),
+              child: isLoadingWeeks
+                  ? const Center(
+                      child: SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: selectedWeekNumber,
+                        dropdownColor: const Color(0xFF1E1E1E),
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        isExpanded: true,
+                        icon: const Icon(Icons.arrow_drop_down, color: Colors.cyanAccent),
+                        items: availableWeeks.map((week) {
+                          final weekNum = week['week_number'] as int;
+                          final isCurrent = week['is_current'] as bool? ?? false;
+                          return DropdownMenuItem<int>(
+                            value: weekNum,
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Week $weekNum',
+                                  style: TextStyle(
+                                    color: isCurrent ? Colors.cyanAccent : Colors.white,
+                                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                ),
+                                if (isCurrent)
+                                  const Padding(
+                                    padding: EdgeInsets.only(left: 8),
+                                    child: Text(
+                                      '(Current)',
+                                      style: TextStyle(
+                                        color: Colors.cyanAccent,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null && value != selectedWeekNumber) {
+                            setState(() {
+                              selectedWeekNumber = value;
+                            });
+                            _fetchLeads();
+                            _fetchPlans();
+                            _fetchUvCount();
+                          }
+                        },
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
-    if (picked != null) {
-      setState(() => _weekRange = picked);
-      _calculateAggregatedData();
-    }
-  }
-
-  void _pickMonth() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedMonth ?? DateTime.now(),
-      firstDate: DateTime(2023),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (picked != null) {
-      setState(() => _selectedMonth = DateTime(picked.year, picked.month));
-      _calculateAggregatedData();
-    }
-  }
-
-  String _formatRange() {
-    if (_selectedFilter == 'Weekly' && _weekRange != null) {
-      return "${DateFormat('MMM dd').format(_weekRange!.start)} - ${DateFormat('MMM dd').format(_weekRange!.end)}";
-    } else if (_selectedFilter == 'Monthly' && _selectedMonth != null) {
-      return DateFormat('MMMM yyyy').format(_selectedMonth!);
-    }
-    return '';
   }
 
   void _showAddLeadDialog() {
     final nameController = TextEditingController();
     final commentController = TextEditingController();
     String selectedResponse = 'A';
+    DateTime selectedDate = DateTime.now();
     bool isSubmitting = false;
     final parentContext = context;
 
@@ -337,6 +427,62 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: () async {
+                        final DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                          builder: (context, child) {
+                            return Theme(
+                              data: ThemeData.dark().copyWith(
+                                colorScheme: const ColorScheme.dark(
+                                  primary: Colors.cyanAccent,
+                                  onPrimary: Colors.black,
+                                  surface: Color(0xFF1E1E2E),
+                                  onSurface: Colors.white,
+                                ),
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          setDialogState(() => selectedDate = picked);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white.withOpacity(0.3)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today, color: Colors.cyanAccent, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Date',
+                                    style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    DateFormat('MMM dd, yyyy').format(selectedDate),
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -363,7 +509,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             infoName: nameController.text.trim(),
                             response: selectedResponse,
                             comments: commentController.text.trim(),
-                            infoDate: DateTime.now(),
+                            infoDate: selectedDate,
                           );
 
                           setDialogState(() => isSubmitting = false);
@@ -402,6 +548,8 @@ class _DashboardPageState extends State<DashboardPage> {
   void _showAddPlanDialog() {
     final nameController = TextEditingController();
     final commentController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+    String selectedStatus = 'closing_pending';
     bool isSubmitting = false;
     final parentContext = context;
 
@@ -448,6 +596,94 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: () async {
+                        final DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                          builder: (context, child) {
+                            return Theme(
+                              data: ThemeData.dark().copyWith(
+                                colorScheme: const ColorScheme.dark(
+                                  primary: Colors.amber,
+                                  onPrimary: Colors.black,
+                                  surface: Color(0xFF1E1E2E),
+                                  onSurface: Colors.white,
+                                ),
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          setDialogState(() => selectedDate = picked);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white.withOpacity(0.3)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today, color: Colors.amber, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Date',
+                                    style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    DateFormat('MMM dd, yyyy').format(selectedDate),
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedStatus,
+                      decoration: InputDecoration(
+                        labelText: 'Status',
+                        labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                        ),
+                        focusedBorder: const OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.amber),
+                        ),
+                      ),
+                      dropdownColor: const Color(0xFF1E1E2E),
+                      style: const TextStyle(color: Colors.white),
+                      items: const [
+                        DropdownMenuItem(value: 'closing_pending', child: Text('Closing Pending')),
+                        DropdownMenuItem(value: 'closed', child: Text('Closed')),
+                        DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+                        DropdownMenuItem(value: 'uvs_on_counter', child: Text("UV's on Counter")),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            selectedStatus = value;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -461,7 +697,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Date: ${DateFormat('MMM dd, yyyy').format(DateTime.now())}\nIR ID: ${widget.irId}',
+                              'IR ID: ${widget.irId}',
                               style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
                             ),
                           ),
@@ -501,7 +737,8 @@ class _DashboardPageState extends State<DashboardPage> {
                             planName: nameController.text.trim(),
                             response: '', // Not used for plans
                             comments: commentController.text.trim(),
-                            planDate: DateTime.now(),
+                            planDate: selectedDate,
+                            status: selectedStatus,
                           );
 
                           setDialogState(() => isSubmitting = false);
@@ -651,10 +888,163 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  void _showDeleteLeadDialog(Map<String, dynamic> lead) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        bool isDeleting = false;
+        final parentContext = context;
+        
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E1E2E),
+              title: const Text('Delete Lead', style: TextStyle(color: Colors.white)),
+              content: Text(
+                'Are you sure you want to delete "${lead['name']}"?',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                GestureDetector(
+                  onTap: isDeleting
+                      ? null
+                      : () async {
+                          setDialogState(() => isDeleting = true);
+
+                          final result = await ApiService.deleteInfoDetail(
+                            lead['id'],
+                            requesterIrId: widget.loggedInIrId,
+                          );
+
+                          setDialogState(() => isDeleting = false);
+
+                          if (!mounted) return;
+                          Navigator.pop(dialogContext);
+
+                          if (result['success']) {
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              const SnackBar(
+                                content: Text('Lead deleted successfully!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            _fetchLeads();
+                          } else {
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              SnackBar(
+                                content: Text(result['error'] ?? 'Failed to delete lead'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: isDeleting ? Colors.grey : Colors.redAccent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: isDeleting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDeletePlanDialog(Map<String, dynamic> plan) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        bool isDeleting = false;
+        final parentContext = context;
+        
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E1E2E),
+              title: const Text('Delete Plan', style: TextStyle(color: Colors.white)),
+              content: Text(
+                'Are you sure you want to delete plan for "${plan['prospect_name']}"?',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                GestureDetector(
+                  onTap: isDeleting
+                      ? null
+                      : () async {
+                          setDialogState(() => isDeleting = true);
+
+                          final result = await ApiService.deletePlanDetail(
+                            plan['id'],
+                            requesterIrId: widget.loggedInIrId,
+                          );
+
+                          setDialogState(() => isDeleting = false);
+
+                          if (!mounted) return;
+                          Navigator.pop(dialogContext);
+
+                          if (result['success']) {
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              const SnackBar(
+                                content: Text('Plan deleted successfully!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            _fetchPlans();
+                          } else {
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              SnackBar(
+                                content: Text(result['error'] ?? 'Failed to delete plan'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: isDeleting ? Colors.grey : Colors.redAccent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: isDeleting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showEditLeadDialog(Map<String, dynamic> lead) {
     final nameController = TextEditingController(text: lead['name']);
     final commentController = TextEditingController(text: lead['comments'] ?? '');
     String selectedResponse = lead['status'] ?? 'A';
+    DateTime selectedDate = lead['date'] ?? DateTime.now();
     bool isSubmitting = false;
     final parentContext = context;
 
@@ -719,6 +1109,62 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: () async {
+                        final DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                          builder: (context, child) {
+                            return Theme(
+                              data: ThemeData.dark().copyWith(
+                                colorScheme: const ColorScheme.dark(
+                                  primary: Colors.cyanAccent,
+                                  onPrimary: Colors.black,
+                                  surface: Color(0xFF1E1E2E),
+                                  onSurface: Colors.white,
+                                ),
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          setDialogState(() => selectedDate = picked);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white.withAlpha(77)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today, color: Colors.cyanAccent, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Date',
+                                    style: TextStyle(color: Colors.white.withAlpha(153), fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    DateFormat('MMM dd, yyyy').format(selectedDate),
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -746,6 +1192,8 @@ class _DashboardPageState extends State<DashboardPage> {
                             infoName: nameController.text.trim(),
                             response: selectedResponse,
                             comments: commentController.text.trim(),
+                            infoDate: selectedDate,
+                            requesterIrId: widget.loggedInIrId,
                           );
 
                           setDialogState(() => isSubmitting = false);
@@ -783,9 +1231,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final filterText = _formatRange();
-
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -881,33 +1328,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 )
               : Column(
                   children: [
-                    // Filter row
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          DropdownButton<String>(
-                            value: _selectedFilter,
-                            dropdownColor: const Color(0xFF1E1E2E),
-                            style: const TextStyle(color: Colors.white),
-                            items: ['Weekly', 'Monthly'].map((f) {
-                              return DropdownMenuItem(value: f, child: Text(f));
-                            }).toList(),
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() => _selectedFilter = value);
-                                _calculateAggregatedData();
-                              }
-                            },
-                          ),
-                          const SizedBox(width: 16),
-                          TextButton(
-                            onPressed: _selectedFilter == 'Weekly' ? _pickWeekRange : _pickMonth,
-                            child: Text(filterText.isEmpty ? 'Select Date' : filterText),
-                          ),
-                        ],
-                      ),
-                    ),
+                    // Week filter dropdown
+                    _buildWeekFilter(),
 
                     // Summary card
                     Container(
@@ -989,6 +1411,93 @@ class _DashboardPageState extends State<DashboardPage> {
 
                     const SizedBox(height: 16),
 
+                    // Info response filter (only show when Infos tab is selected)
+                    if (_selectedTab == 'Infos')
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E2E),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.filter_list, color: Colors.cyanAccent, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String?>(
+                                  value: _selectedInfoResponseFilter,
+                                  dropdownColor: const Color(0xFF1E1E2E),
+                                  style: const TextStyle(color: Colors.white),
+                                  isExpanded: true,
+                                  hint: const Text('All Infos', style: TextStyle(color: Colors.white)),
+                                  items: const [
+                                    DropdownMenuItem(value: null, child: Text('All Infos')),
+                                    DropdownMenuItem(value: 'A', child: Text('A')),
+                                    DropdownMenuItem(value: 'B', child: Text('B')),
+                                    DropdownMenuItem(value: 'C', child: Text('C')),
+                                  ],
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _selectedInfoResponseFilter = value;
+                                      _fetchLeads();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    if (_selectedTab == 'Infos') const SizedBox(height: 16),
+
+                    // Plan status filter (only show when Plans tab is selected)
+                    if (_selectedTab == 'Plans')
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E2E),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.filter_list, color: Colors.amber, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String?>(
+                                  value: _selectedPlanStatusFilter,
+                                  dropdownColor: const Color(0xFF1E1E2E),
+                                  style: const TextStyle(color: Colors.white),
+                                  isExpanded: true,
+                                  hint: const Text('All Plans', style: TextStyle(color: Colors.white)),
+                                  items: const [
+                                    DropdownMenuItem(value: null, child: Text('All Plans')),
+                                    DropdownMenuItem(value: 'closing_pending', child: Text('Closing Pending')),
+                                    DropdownMenuItem(value: 'closed', child: Text('Closed')),
+                                    DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+                                    DropdownMenuItem(value: 'uvs_on_counter', child: Text("UV's on Counter")),
+                                  ],
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _selectedPlanStatusFilter = value;
+                                      _fetchPlans();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    if (_selectedTab == 'Plans') const SizedBox(height: 16),
+
                     // Tabbed content
                     Expanded(
                       child: _selectedTab == 'Infos'
@@ -1037,6 +1546,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                               IconButton(
                                                 icon: const Icon(Icons.edit, color: Colors.cyanAccent, size: 20),
                                                 onPressed: () => _showEditLeadDialog(lead),
+                                              ),
+                                            if (canDelete)
+                                              IconButton(
+                                                icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
+                                                onPressed: () => _showDeleteLeadDialog(lead),
                                               ),
                                           ],
                                         ),
@@ -1108,6 +1622,18 @@ class _DashboardPageState extends State<DashboardPage> {
                                                     DateFormat('MMM dd, yyyy').format(plan['date']),
                                                     style: const TextStyle(color: Colors.white54, fontSize: 12),
                                                   ),
+                                                  const SizedBox(height: 4),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: _getPlanStatusColor(plan['status'] ?? 'closing_pending'),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: Text(
+                                                      _getPlanStatusLabel(plan['status'] ?? 'closing_pending'),
+                                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
+                                                    ),
+                                                  ),
                                                 ],
                                               ),
                                             ),
@@ -1115,6 +1641,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                               IconButton(
                                                 icon: const Icon(Icons.edit, color: Colors.amber, size: 20),
                                                 onPressed: () => _showEditPlanDialog(plan),
+                                              ),
+                                            if (canDelete)
+                                              IconButton(
+                                                icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
+                                                onPressed: () => _showDeletePlanDialog(plan),
                                               ),
                                           ],
                                         ),
@@ -1166,6 +1697,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _showEditPlanDialog(Map<String, dynamic> plan) {
     final commentController = TextEditingController(text: plan['comments'] ?? '');
+    String selectedStatus = plan['status'] ?? 'closing_pending';
     bool isSubmitting = false;
     final parentContext = context;
 
@@ -1218,6 +1750,35 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedStatus,
+                      decoration: InputDecoration(
+                        labelText: 'Status',
+                        labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                        ),
+                        focusedBorder: const OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.amber),
+                        ),
+                      ),
+                      dropdownColor: const Color(0xFF1E1E2E),
+                      style: const TextStyle(color: Colors.white),
+                      items: const [
+                        DropdownMenuItem(value: 'closing_pending', child: Text('Closing Pending')),
+                        DropdownMenuItem(value: 'closed', child: Text('Closed')),
+                        DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+                        DropdownMenuItem(value: 'uvs_on_counter', child: Text("UV's on Counter")),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            selectedStatus = value;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
                     TextField(
                       controller: commentController,
                       style: const TextStyle(color: Colors.white),
@@ -1262,6 +1823,8 @@ class _DashboardPageState extends State<DashboardPage> {
                             planId: plan['id'],
                             planName: plan['prospect_name'],
                             comments: commentController.text.trim(),
+                            requesterIrId: widget.loggedInIrId,
+                            status: selectedStatus,
                           );
 
                           setDialogState(() => isSubmitting = false);
@@ -1322,6 +1885,36 @@ class _DashboardPageState extends State<DashboardPage> {
         return Colors.red;
       default:
         return Colors.grey;
+    }
+  }
+
+  Color _getPlanStatusColor(String status) {
+    switch (status) {
+      case 'closed':
+        return Colors.green;
+      case 'closing_pending':
+        return Colors.orange;
+      case 'rejected':
+        return Colors.red;
+      case 'uvs_on_counter':
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getPlanStatusLabel(String status) {
+    switch (status) {
+      case 'closed':
+        return 'Closed';
+      case 'closing_pending':
+        return 'Closing Pending';
+      case 'rejected':
+        return 'Rejected';
+      case 'uvs_on_counter':
+        return "UV's on Counter";
+      default:
+        return 'Unknown';
     }
   }
 }

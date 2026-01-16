@@ -37,7 +37,7 @@ class _SignupScreenState extends State<SignupScreen> {
     try {
       // 🔹 Step 1: Reserve IR ID
       final reserveResponse = await http.post(
-        Uri.parse('$baseUrl/api/add_ir_id'),
+        Uri.parse('$baseUrl$addIrId'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'ir_id': irId}),
       );
@@ -51,7 +51,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
       // 🔹 Step 2: Register the IR
       final registerResponse = await http.post(
-        Uri.parse('$baseUrl/api/register_new_ir'),
+        Uri.parse('$baseUrl$registerIrId'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'ir_id': irId,
@@ -100,10 +100,11 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(title: const Text("Sign Up")),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
+      body: SafeArea(
         child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
           child: Column(
             children: [
               const Text(

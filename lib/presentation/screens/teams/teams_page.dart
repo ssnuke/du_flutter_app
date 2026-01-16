@@ -34,6 +34,12 @@ class _TeamsPageState extends State<TeamsPage> {
   String errorMessage = '';
   int? currentWeekNumber;
   int? currentYear;
+  
+  // Week filter state
+  int? selectedWeekNumber;
+  int? selectedYear;
+  List<Map<String, dynamic>> availableWeeks = [];
+  bool isLoadingWeeks = false;
 
   // Role-based checks
   bool get hasFullAccess => AccessLevel.hasFullAccess(widget.userRole);
@@ -42,7 +48,44 @@ class _TeamsPageState extends State<TeamsPage> {
   @override
   void initState() {
     super.initState();
+    _fetchAvailableWeeks();
     _fetchVisibleTeams();
+  }
+  
+  /// Fetches available weeks from the backend
+  Future<void> _fetchAvailableWeeks() async {
+    setState(() {
+      isLoadingWeeks = true;
+    });
+
+    try {
+      final url = Uri.parse('$baseUrl/api/available_weeks/');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> weeks = responseData['weeks'] ?? [];
+        
+        setState(() {
+          availableWeeks = weeks.cast<Map<String, dynamic>>();
+          currentWeekNumber = responseData['current_week'];
+          currentYear = responseData['current_year'];
+          // Set selected to current week initially
+          selectedWeekNumber = currentWeekNumber;
+          selectedYear = currentYear;
+          isLoadingWeeks = false;
+        });
+      } else {
+        setState(() {
+          isLoadingWeeks = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching available weeks: $e');
+      setState(() {
+        isLoadingWeeks = false;
+      });
+    }
   }
 
   /// Fetches all visible teams using the hierarchy-based visible_teams API
@@ -53,8 +96,11 @@ class _TeamsPageState extends State<TeamsPage> {
       errorMessage = '';
     });
 
-    // Use the new visible_teams endpoint for all roles
-    final url = Uri.parse('$baseUrl$getVisibleTeamsEndpoint/${widget.irId}');
+    // Build URL with week filter if selected
+    var url = Uri.parse('$baseUrl$getVisibleTeamsEndpoint/${widget.irId}');
+    if (selectedWeekNumber != null && selectedYear != null) {
+      url = Uri.parse('$baseUrl$getVisibleTeamsEndpoint/${widget.irId}?week=$selectedWeekNumber&year=$selectedYear');
+    }
 
     try {
       final response = await http.get(url);
@@ -67,8 +113,12 @@ class _TeamsPageState extends State<TeamsPage> {
         currentWeekNumber = responseData['week_number'];
         currentYear = responseData['year'];
 
-        // preserve previous non-zero target values to avoid overwriting with 0
-        final previousTargets = {for (var t in teamData) t.id: t};
+        // Only preserve previous values if we're fetching the same week
+        // This prevents historical week data from being overwritten with current week data
+        final isSameWeekAsBefore = teamData.isNotEmpty && 
+                                    teamData.first.weekNumber == currentWeekNumber &&
+                                    teamData.first.year == currentYear;
+        final previousTargets = isSameWeekAsBefore ? {for (var t in teamData) t.id: t} : <String, Team>{};
 
         final List<Team> fetched = teamsJson.map((item) => Team.fromJson(item)).toList();
 
@@ -87,8 +137,8 @@ class _TeamsPageState extends State<TeamsPage> {
 
         final merged = fetched.map((t) {
           final prev = previousTargets[t.id];
-          if (prev != null) {
-            // Merge with previous non-zero values
+          if (prev != null && isSameWeekAsBefore) {
+            // Only merge with previous non-zero values if it's the same week
             return t.copyWith(
               weeklyInfoTarget: (t.weeklyInfoTarget == 0 && prev.weeklyInfoTarget != 0) ? prev.weeklyInfoTarget : t.weeklyInfoTarget,
               weeklyPlanTarget: (t.weeklyPlanTarget == 0 && prev.weeklyPlanTarget != 0) ? prev.weeklyPlanTarget : t.weeklyPlanTarget,
@@ -109,8 +159,9 @@ class _TeamsPageState extends State<TeamsPage> {
         });
         
         debugPrint('Visible teams fetched: ${teamData.length} items');
-        // Optionally fetch additional details
-        await _fetchTargetsForTeams();
+
+        // Always fetch targets and calls for the currently displayed teams
+        // await _fetchTargetsForTeams();
         await _fetchTeamTotalCalls();
       } else {
         setState(() {
@@ -127,7 +178,22 @@ class _TeamsPageState extends State<TeamsPage> {
   }
 
   Future<void> _fetchTeamTotalCalls() async {
-    debugPrint('_fetchTeamTotalCalls: starting for ${teamData.length} teams');
+    if (selectedWeekNumber == null || availableWeeks.isEmpty) return;
+
+    final selectedWeekData = availableWeeks.firstWhere(
+      (w) => w['week_number'] == selectedWeekNumber,
+      orElse: () => {},
+    );
+
+    if (selectedWeekData.isEmpty) return;
+
+    final fromDate = selectedWeekData['week_start']?.split('T')[0];
+    final toDate = selectedWeekData['week_end']?.split('T')[0];
+
+    if (fromDate == null || toDate == null) return;
+
+    debugPrint('_fetchTeamTotalCalls: starting for week $selectedWeekNumber ($fromDate to $toDate)');
+    
     for (final team in teamData) {
       try {
         final url = Uri.parse('$baseUrl/api/team_members/${team.id}');
@@ -141,7 +207,7 @@ class _TeamsPageState extends State<TeamsPage> {
             final String irId = member['ir_id'] ?? '';
             if (irId.isEmpty) continue;
 
-            final result = await ApiService.getInfoDetails(irId);
+            final result = await ApiService.getInfoDetails(irId, fromDate: fromDate, toDate: toDate);
             if (result['success']) {
               final List<dynamic> leads = result['data'] ?? [];
               totalCalls += leads.length;
@@ -163,12 +229,17 @@ class _TeamsPageState extends State<TeamsPage> {
   /// Some backends store team targets separately (e.g., targets dashboard).
   /// Try to fetch targets for the current user and merge them into the `teamData`.
   Future<void> _fetchTargetsForTeams() async {
-    if (teamData.isEmpty) return;
+    if (teamData.isEmpty || selectedWeekNumber == null) return;
     try {
-      final result = await ApiService.getTargetsDashboard(widget.irId);
+      // Pass week and year to get targets for the selected week
+      final result = await ApiService.getTargetsDashboard(
+        widget.irId,
+        week: selectedWeekNumber,
+        year: selectedYear,
+      );
       if (result['success']) {
         final data = result['data'];
-        debugPrint("Fetched targets data: $data");
+        // debugPrint("Fetched targets data: $data");
         // Build a mapping of teamId -> targets
         final Map<String, Map<String, int>> mapping = {};
 
@@ -275,117 +346,208 @@ class _TeamsPageState extends State<TeamsPage> {
     }
   }
 
+  Widget _buildWeekFilter() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const Text(
+            'Week: ',
+            style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+              ),
+              child: isLoadingWeeks
+                  ? const Center(
+                      child: SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: selectedWeekNumber,
+                        dropdownColor: const Color(0xFF1E1E1E),
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        isExpanded: true,
+                        icon: const Icon(Icons.arrow_drop_down, color: Colors.cyanAccent),
+                        items: availableWeeks.map((week) {
+                          final weekNum = week['week_number'] as int;
+                          final isCurrent = week['is_current'] as bool? ?? false;
+                          return DropdownMenuItem<int>(
+                            value: weekNum,
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Week $weekNum',
+                                  style: TextStyle(
+                                    color: isCurrent ? Colors.cyanAccent : Colors.white,
+                                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                ),
+                                if (isCurrent)
+                                  const Padding(
+                                    padding: EdgeInsets.only(left: 8),
+                                    child: Text(
+                                      '(Current)',
+                                      style: TextStyle(
+                                        color: Colors.cyanAccent,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null && value != selectedWeekNumber) {
+                            setState(() {
+                              selectedWeekNumber = value;
+                              // Year should stay the same for now
+                            });
+                            _fetchVisibleTeams();
+                          }
+                        },
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // When navigated from ManagersPage, show with Scaffold and back button
     final bool showAsSubPage = widget.managerName != null;
 
-    final content = isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : errorMessage.isNotEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      errorMessage,
-                      style: const TextStyle(color: Colors.white70),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    GestureDetector(
-                      onTap: _fetchVisibleTeams,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-                        decoration: BoxDecoration(
-                          color: Colors.cyanAccent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'Retry',
-                          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : teamData.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.group_off, size: 64, color: Colors.grey[600]),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Not assigned to any team',
-                          style: TextStyle(fontSize: 18, color: Colors.white70, fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Contact your LDC to be added to a team',
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _fetchVisibleTeams,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 80),
-                      itemCount: teamData.length,
-                      itemBuilder: (context, index) {
-                        final team = teamData[index];
-                        final int actualCalls = team.infoProgress != 0
-                            ? team.infoProgress
-                            : (teamTotalCalls[team.id] ?? 0);
-                        
-                        // Check if this team was created by the logged-in user
-                        final isOwnTeam = team.createdById == widget.irId;
-                        
-                        return InfoCard(
-                          managerName: team.name,
-                          totalCalls: actualCalls,
-                          targetCalls: team.weeklyInfoTarget,
-                          totalTurnover: team.uvProgress.toDouble(),
-                          targetUv: team.weeklyUvTarget,
-                          clientMeetings: team.planProgress,
-                          targetMeetings: team.weeklyPlanTarget,
-                          isTeam: true,
-                          isOwnTeam: isOwnTeam,
-                          createdByName: team.createdByName,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => TeamMembersPage(
-                                  teamName: team.name,
-                                  teamId: team.id,
-                                  userRole: widget.userRole,
-                                  loggedInIrId: widget.loggedInIrId ?? widget.irId,
-                                  weeklyInfoTarget: team.weeklyInfoTarget,
-                                  weeklyPlanTarget: team.weeklyPlanTarget,
-                                  weeklyUvTarget: team.weeklyUvTarget,
-                                  infoProgress: team.infoProgress,
-                                  planProgress: team.planProgress,
-                                  uvProgress: team.uvProgress,
-                                  weekNumber: team.weekNumber,
-                                  year: team.year,
-                                ),
+    final content = Column(
+      children: [
+        // Week filter dropdown
+        _buildWeekFilter(),
+        // Main content
+        Expanded(
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : errorMessage.isNotEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            errorMessage,
+                            style: const TextStyle(color: Colors.white70),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          GestureDetector(
+                            onTap: _fetchVisibleTeams,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                              decoration: BoxDecoration(
+                                color: Colors.cyanAccent,
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                            ).then((_) {
-                              // Re-fetch full team list (including weekly targets)
-                              _fetchVisibleTeams();
-                              _fetchTeamTotalCalls();
-                            });
-                          },
-                        );
-                      },
-                    ),
-                  );
+                              child: const Text(
+                                'Retry',
+                                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : teamData.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.group_off, size: 64, color: Colors.grey[600]),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Not assigned to any team',
+                                style: TextStyle(fontSize: 18, color: Colors.white70, fontWeight: FontWeight.w500),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Contact your LDC to be added to a team',
+                                style: TextStyle(fontSize: 14, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _fetchVisibleTeams,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.only(bottom: 80),
+                            itemCount: teamData.length,
+                            itemBuilder: (context, index) {
+                              final team = teamData[index];
+                              final int actualCalls = team.infoProgress != 0
+                                  ? team.infoProgress
+                                  : (teamTotalCalls[team.id] ?? 0);
+                              
+                              // Check if this team was created by the logged-in user
+                              final isOwnTeam = team.createdById == widget.irId;
+                              
+                              return InfoCard(
+                                managerName: team.name,
+                                totalCalls: actualCalls,
+                                targetCalls: team.weeklyInfoTarget,
+                                totalTurnover: team.uvProgress.toDouble(),
+                                targetUv: team.weeklyUvTarget,
+                                clientMeetings: team.planProgress,
+                                targetMeetings: team.weeklyPlanTarget,
+                                isTeam: true,
+                                isOwnTeam: isOwnTeam,
+                                createdByName: team.createdByName,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => TeamMembersPage(
+                                        teamName: team.name,
+                                        teamId: team.id,
+                                        userRole: widget.userRole,
+                                        loggedInIrId: widget.loggedInIrId ?? widget.irId,
+                                        weeklyInfoTarget: team.weeklyInfoTarget,
+                                        weeklyPlanTarget: team.weeklyPlanTarget,
+                                        weeklyUvTarget: team.weeklyUvTarget,
+                                        infoProgress: team.infoProgress,
+                                        planProgress: team.planProgress,
+                                        uvProgress: team.uvProgress,
+                                        weekNumber: team.weekNumber,
+                                        year: team.year,
+                                        selectedWeekNumber: selectedWeekNumber,
+                                        selectedYear: selectedYear,
+                                      ),
+                                    ),
+                                  ).then((_) {
+                                    // Re-fetch team list with current week filter
+                                    _fetchVisibleTeams();
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                        ),
+        ),
+      ],
+    );
 
     if (showAsSubPage) {
       return Scaffold(
+        resizeToAvoidBottomInset: false,
         backgroundColor: const Color(0xFF121212),
         appBar: AppBar(
           automaticallyImplyLeading: false,

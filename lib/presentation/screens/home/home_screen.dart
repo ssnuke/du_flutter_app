@@ -108,6 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           automaticallyImplyLeading: false,
         backgroundColor: const Color(0xFF121212),
@@ -190,16 +191,16 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: canAccessAdminPanel && _selectedIndex == 0
           ? FloatingActionButton(
               onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                      content: AddMemberSheet(
-                        irId: widget.irId,
-                        userRole: widget.userRole,
-                        onDataChanged: _refreshHomePage,
-                        parentContext: context,
-                      ),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AddMemberSheet(
+                      irId: widget.irId,
+                      userRole: widget.userRole,
+                      onDataChanged: _refreshHomePage,
+                      parentContext: context,
                     ),
+                  ),
                 );
               },
               child: const Icon(Icons.add),

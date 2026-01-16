@@ -15,6 +15,7 @@ const String updateTeamNameEndpoint = "/api/update_team_name"; // + /{team_id}
 const String deleteTeamEndpoint = "/api/delete_team"; // + /{team_id}
 const String addIrToTeamEndpoint = "/api/add_ir_to_team/";
 const String removeIrFromTeamEndpoint = "/api/remove_ir_from_team"; // + /{team_id}/{ir_id}
+const String moveIrToTeamEndpoint = "/api/move_ir_to_team/";
 const String getTeamMembersEndpoint = "/api/team_members"; // + /{team_id}
 
 // API Endpoints - Lead/Info Data (CRUD)
@@ -51,3 +52,6 @@ const String passwordResetEndpoint = '/api/password_reset/'; // + {ir_id}/
 
 // API Endpoint - Change Access Level (NOTE: Endpoint needs to be implemented on backend first)
 const String changeAccessLevels = '/api/change_access_level/'; 
+
+const String addIrId = '/api/add_ir_id/';
+const String registerIrId = '/api/register_new_ir/';

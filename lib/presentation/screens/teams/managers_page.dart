@@ -40,7 +40,10 @@ class _ManagersPageState extends State<ManagersPage> {
     });
 
     try {
-      final url = Uri.parse('$baseUrl$getLdcsEndpoint');
+      // Pass requester_ir_id for hierarchy filtering
+      final url = Uri.parse('$baseUrl$getLdcsEndpoint').replace(
+        queryParameters: {'requester_ir_id': widget.irId},
+      );
       final response = await http.get(url);
 
       if (response.statusCode == 200) {

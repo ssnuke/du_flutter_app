@@ -45,6 +45,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
   final _searchAccessLevelIrController = TextEditingController();
 
   String? _selectedIrId;
+  List<String> _selectedIrIds = []; // Support multiple selection
   String? _selectedTeamId;
   String? _selectedRole = 'IR'; // Default to IR role
   String? _selectedTargetTeamId;
@@ -65,7 +66,8 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
   bool get hasFullAccess => AccessLevel.hasFullAccess(widget.userRole);
   bool get canCreateTeam => AccessLevel.canCreateTeam(widget.userRole);
   bool get canManageTeams => AccessLevel.canManageTeams(widget.userRole);
-  bool get canChangeAccessLevels => AccessLevel.canChangeAccessLevels(widget.userRole);
+  bool get canChangeAccessLevels =>
+      AccessLevel.canChangeAccessLevels(widget.userRole);
   bool get canDeleteTeams => AccessLevel.canDeleteTeams(widget.userRole);
 
   @override
@@ -111,25 +113,28 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
         if (!mounted) return;
         setState(() {
           _allIrs = irsData
-              .where((ir) => 
-                ir['ir_id'] != null && 
-                ir['ir_id'].toString().isNotEmpty &&
-                ir['ir_access_level'] != 1) // Filter out SuperAdmin
+              .where((ir) =>
+                  ir['ir_id'] != null &&
+                  ir['ir_id'].toString().isNotEmpty &&
+                  ir['ir_access_level'] != 1) // Filter out SuperAdmin
               .map<Map<String, dynamic>>((ir) => {
-                'ir_id': ir['ir_id'].toString(),
-                'ir_name': (ir['ir_name'] ?? ir['ir_id']).toString(),
-                'ir_access_level': ir['ir_access_level'] ?? 5,
-              }).toList();
+                    'ir_id': ir['ir_id'].toString(),
+                    'ir_name': (ir['ir_name'] ?? ir['ir_id']).toString(),
+                    'ir_access_level': ir['ir_access_level'] ?? 5,
+                  })
+              .toList();
           _filteredIrs = List.from(_allIrs);
           _filteredRemoveIrs = List.from(_allIrs);
           _filteredAccessLevelIrs = List.from(_allIrs);
         });
-        print('All IRs loaded: ${_allIrs.length} items (SuperAdmin filtered out)');
+        print(
+            'All IRs loaded: ${_allIrs.length} items (SuperAdmin filtered out)');
         if (_allIrs.isEmpty) {
           _showSnackBar('No IRs found in the system', isError: true);
         }
       } else {
-        _showSnackBar('Failed to load IRs (${irsResponse.statusCode})', isError: true);
+        _showSnackBar('Failed to load IRs (${irsResponse.statusCode})',
+            isError: true);
       }
     } catch (e) {
       print('Error fetching IRs: $e');
@@ -146,23 +151,32 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
 
     try {
       // ADMIN/CTC can see all teams, LDC sees only their teams
-      final String endpoint = hasFullAccess
-          ? getTeamsEndpoint
-          : '$getTeamsByLdcEndpoint/${widget.irId}';
-      final teamsUrl = Uri.parse('$baseUrl$endpoint');
+      final Uri teamsUrl;
+      if (hasFullAccess) {
+        teamsUrl = Uri.parse('$baseUrl$getTeamsEndpoint');
+      } else {
+        // Pass requester_ir_id for hierarchy filtering
+        teamsUrl =
+            Uri.parse('$baseUrl$getTeamsByLdcEndpoint/${widget.irId}').replace(
+          queryParameters: {'requester_ir_id': widget.irId},
+        );
+      }
       final teamsResponse = await http.get(teamsUrl);
 
       if (teamsResponse.statusCode == 200) {
         final List<dynamic> teamsData = json.decode(teamsResponse.body);
         if (!mounted) return;
         setState(() {
-          _managerTeams = teamsData.map<Map<String, dynamic>>((team) => {
-            'id': (team['id'] ?? '').toString(),
-            'name': (team['name'] ?? 'Unnamed Team').toString(),
-            'weekly_info_target': team['weekly_info_target'] ?? 0,
-            'weekly_plan_target': team['weekly_plan_target'] ?? 0,
-            'weekly_uv_target': team['weekly_uv_target'] ?? team['uv_target'] ?? 0,
-          }).toList();
+          _managerTeams = teamsData
+              .map<Map<String, dynamic>>((team) => {
+                    'id': (team['id'] ?? '').toString(),
+                    'name': (team['name'] ?? 'Unnamed Team').toString(),
+                    'weekly_info_target': team['weekly_info_target'] ?? 0,
+                    'weekly_plan_target': team['weekly_plan_target'] ?? 0,
+                    'weekly_uv_target':
+                        team['weekly_uv_target'] ?? team['uv_target'] ?? 0,
+                  })
+              .toList();
         });
       }
     } catch (e) {
@@ -179,11 +193,18 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       if (teamId != null) {
         final team = _managerTeams.firstWhere(
           (t) => t['id'] == teamId,
-          orElse: () => {'weekly_info_target': 0, 'weekly_plan_target': 0, 'weekly_uv_target': 0},
+          orElse: () => {
+            'weekly_info_target': 0,
+            'weekly_plan_target': 0,
+            'weekly_uv_target': 0
+          },
         );
-        _weeklyInfoTargetController.text = (team['weekly_info_target'] ?? 0).toString();
-        _weeklyPlanTargetController.text = (team['weekly_plan_target'] ?? 0).toString();
-        _weeklyUvTargetController.text = (team['weekly_uv_target'] ?? 0).toString();
+        _weeklyInfoTargetController.text =
+            (team['weekly_info_target'] ?? 0).toString();
+        _weeklyPlanTargetController.text =
+            (team['weekly_plan_target'] ?? 0).toString();
+        _weeklyUvTargetController.text =
+            (team['weekly_uv_target'] ?? 0).toString();
       }
     });
   }
@@ -218,7 +239,8 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
     setState(() => _isLoading = false);
 
     if (result['success']) {
-      final scaffoldMessenger = ScaffoldMessenger.of(widget.parentContext ?? context);
+      final scaffoldMessenger =
+          ScaffoldMessenger.of(widget.parentContext ?? context);
       final callback = widget.onDataChanged;
 
       setState(() {
@@ -228,6 +250,8 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
         _weeklyUvTargetController.clear();
         showSetTargets = false;
       });
+
+      callback?.call();
       Navigator.pop(context);
 
       scaffoldMessenger.showSnackBar(
@@ -236,8 +260,6 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
           backgroundColor: Colors.green,
         ),
       );
-
-      callback?.call();
     } else {
       _showSnackBar(result['error'] ?? 'Failed to set targets', isError: true);
     }
@@ -254,7 +276,8 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Team'),
-        content: const Text('Are you sure you want to delete this team? This action cannot be undone.'),
+        content: const Text(
+            'Are you sure you want to delete this team? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -273,13 +296,15 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    final result = await ApiService.deleteTeam(_selectedDeleteTeamId!);
+    final result = await ApiService.deleteTeam(_selectedDeleteTeamId!,
+        requesterIrId: widget.irId);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (result['success']) {
-      final scaffoldMessenger = ScaffoldMessenger.of(widget.parentContext ?? context);
+      final scaffoldMessenger =
+          ScaffoldMessenger.of(widget.parentContext ?? context);
       final callback = widget.onDataChanged;
 
       if (!mounted) return;
@@ -287,6 +312,8 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
         _selectedDeleteTeamId = null;
         showDeleteTeam = false;
       });
+
+      callback?.call();
       Navigator.pop(context);
 
       scaffoldMessenger.showSnackBar(
@@ -296,8 +323,6 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-
-      callback?.call();
     } else {
       _showSnackBar(result['error'] ?? 'Failed to delete team', isError: true);
     }
@@ -325,10 +350,14 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
 
         if (!mounted) return;
         setState(() {
-          _irTeams = teamsData.map<Map<String, dynamic>>((team) => {
-            'id': (team['id'] ?? team['team_id'] ?? '').toString(),
-            'name': (team['name'] ?? team['team_name'] ?? 'Unnamed Team').toString(),
-          }).toList();
+          _irTeams = teamsData
+              .map<Map<String, dynamic>>((team) => {
+                    'id': (team['id'] ?? team['team_id'] ?? '').toString(),
+                    'name':
+                        (team['name'] ?? team['team_name'] ?? 'Unnamed Team')
+                            .toString(),
+                  })
+              .toList();
         });
 
         if (_irTeams.isEmpty) {
@@ -361,7 +390,8 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove IR from Team'),
-        content: const Text('Are you sure you want to remove this IR from the team?'),
+        content: const Text(
+            'Are you sure you want to remove this IR from the team?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -383,13 +413,15 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
     final result = await ApiService.removeIrFromTeam(
       teamId: _selectedRemoveTeamId!,
       irId: _selectedRemoveIrId!,
+      requesterIrId: widget.irId,
     );
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (result['success']) {
-      final scaffoldMessenger = ScaffoldMessenger.of(widget.parentContext ?? context);
+      final scaffoldMessenger =
+          ScaffoldMessenger.of(widget.parentContext ?? context);
       final callback = widget.onDataChanged;
 
       if (!mounted) return;
@@ -399,6 +431,8 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
         _irTeams = [];
         showRemoveIrFromTeam = false;
       });
+
+      callback?.call();
       Navigator.pop(context);
 
       scaffoldMessenger.showSnackBar(
@@ -408,10 +442,9 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-
-      callback?.call();
     } else {
-      _showSnackBar(result['error'] ?? 'Failed to remove IR from team', isError: true);
+      _showSnackBar(result['error'] ?? 'Failed to remove IR from team',
+          isError: true);
     }
   }
 
@@ -426,7 +459,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
 
     final teamName = _teamNameController.text.trim();
     print('Creating team with name: "$teamName"');
-    
+
     final result = await ApiService.createTeam(
       teamName,
       widget.irId,
@@ -442,10 +475,11 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       _teamNameController.clear();
       if (!mounted) return;
       setState(() => showCreateTeam = false);
-      
+
       // Refresh the teams list so newly created team appears in dropdowns
       await _fetchManagerTeams();
-      
+
+      callback?.call();
       Navigator.pop(context);
 
       scaffoldMessenger.showSnackBar(
@@ -454,16 +488,15 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
           backgroundColor: Colors.green,
         ),
       );
-
-      callback?.call();
     } else {
       _showSnackBar(result['error'] ?? 'Failed to create team', isError: true);
     }
   }
 
   Future<void> _addMemberToTeam() async {
-    if (_selectedIrId == null) {
-      _showSnackBar('Please select an IR', isError: true);
+    // Check if at least one IR is selected
+    if (_selectedIrIds.isEmpty && _selectedIrId == null) {
+      _showSnackBar('Please select at least one IR', isError: true);
       return;
     }
     if (_selectedTeamId == null) {
@@ -478,10 +511,13 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
+    // Use bulk API if multiple IRs selected, otherwise single
     final result = await ApiService.addIrToTeam(
-      irId: _selectedIrId!,
+      irIds: _selectedIrIds.isNotEmpty ? _selectedIrIds : null,
+      irId: _selectedIrIds.isEmpty ? _selectedIrId : null,
       teamId: _selectedTeamId!,
       role: _selectedRole!,
+      requesterIrId: widget.irId,
     );
 
     if (!mounted) return;
@@ -494,22 +530,32 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       if (!mounted) return;
       setState(() {
         _selectedIrId = null;
+        _selectedIrIds = [];
         _selectedTeamId = null;
         _selectedRole = null;
         showAddMember = false;
       });
+
+      callback?.call();
       Navigator.pop(context);
+
+      final addedCount = result.containsKey('data') &&
+              result['data'].containsKey('added_count')
+          ? result['data']['added_count']
+          : 1;
+      final message = addedCount > 1
+          ? 'Successfully added $addedCount members to team'
+          : 'Member added to team successfully!';
 
       scaffoldMessenger.showSnackBar(
         SnackBar(
-          content: const Text('Member added to team successfully!'),
+          content: Text(message),
           backgroundColor: Colors.green,
         ),
       );
-
-      callback?.call();
     } else {
-      _showSnackBar(result['error'] ?? 'Failed to add member', isError: true);
+      _showSnackBar(result['error'] ?? 'Failed to add member(s)',
+          isError: true);
     }
   }
 
@@ -589,12 +635,13 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       // Check if the modified user is the currently logged-in user
       // If so, update SharedPreferences and force app restart
       bool isOwnAccount = targetIrId == widget.irId;
-      
+
       if (isOwnAccount && newAccessLevel != null) {
         // Update SharedPreferences with new access level
         final prefs = await SharedPreferences.getInstance();
         await prefs.setInt('userRole', newAccessLevel);
-        print('✅ Updated own access level in SharedPreferences: ${widget.userRole} -> $newAccessLevel');
+        print(
+            '✅ Updated own access level in SharedPreferences: ${widget.userRole} -> $newAccessLevel');
       }
 
       if (!mounted) return;
@@ -603,11 +650,14 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
         _selectedNewAccessLevel = null;
         showChangeAccessLevel = false;
       });
+
+      callback?.call();
       Navigator.pop(context);
 
       scaffoldMessenger.showSnackBar(
         SnackBar(
-          content: Text(result['message'] ?? 'Access level changed successfully!'),
+          content:
+              Text(result['message'] ?? 'Access level changed successfully!'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 4),
         ),
@@ -626,7 +676,8 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Note: The affected user will see their new role badge when they restart the app.'),
+                content: Text(
+                    'Note: The affected user will see their new role badge when they restart the app.'),
                 backgroundColor: Colors.blue,
                 duration: Duration(seconds: 5),
               ),
@@ -634,10 +685,9 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
           }
         });
       }
-
-      callback?.call();
     } else {
-      _showSnackBar(result['error'] ?? 'Failed to change access level', isError: true);
+      _showSnackBar(result['error'] ?? 'Failed to change access level',
+          isError: true);
     }
   }
 
@@ -660,7 +710,8 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
                 (route) => false,
               );
             },
-            child: const Text('Restart Now', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('Restart Now',
+                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -669,702 +720,870 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Quick Actions",
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 24),
-
-          // Create Team
-          if (canManageTeams && !showAddMember && !showCreateTeam && !showSetTargets && !showDeleteTeam && !showRemoveIrFromTeam && !showChangeAccessLevel)
-            GestureDetector(
-              onTap: () => setState(() => showCreateTeam = true),
-              child: Card(
-                child: const ListTile(
-                  title: Text("Create Team"),
-                  trailing: Icon(Icons.group_add),
-                  textColor: Colors.cyan,
-                ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin Panel'),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Quick Actions",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-            ),
+              const SizedBox(height: 24),
 
-          // Add Member to Team
-          if (canManageTeams && !showAddMember && !showCreateTeam && !showSetTargets && !showDeleteTeam && !showRemoveIrFromTeam && !showChangeAccessLevel)
-            GestureDetector(
-              onTap: () {
-                setState(() => showAddMember = true);
-                _fetchAllIrs();
-                _fetchManagerTeams();
-              },
-              child: Card(
-                child: const ListTile(
-                  title: Text("Add Member to Team"),
-                  trailing: Icon(Icons.person_add),
-                ),
-              ),
-            ),
-
-          // Remove IR from Team (ADMIN, CTC, LDC only)
-          if (canManageTeams && !showAddMember && !showCreateTeam && !showSetTargets && !showDeleteTeam && !showRemoveIrFromTeam && !showChangeAccessLevel)
-            GestureDetector(
-              onTap: () {
-                setState(() => showRemoveIrFromTeam = true);
-                _fetchAllIrs();
-              },
-              child: Card(
-                child: const ListTile(
-                  title: Text("Remove IR from Team"),
-                  trailing: Icon(Icons.person_remove, color: Colors.orange),
-                ),
-              ),
-            ),
-
-          // Promote/Demote IR (ADMIN, CTC only - not LDC)
-          if (canChangeAccessLevels && !showAddMember && !showCreateTeam && !showSetTargets && !showDeleteTeam && !showRemoveIrFromTeam && !showChangeAccessLevel)
-            GestureDetector(
-              onTap: () {
-                setState(() => showChangeAccessLevel = true);
-                _fetchAllIrs();
-              },
-              child: Card(
-                child: const ListTile(
-                  title: Text("Promote / Demote IR"),
-                  trailing: Icon(Icons.admin_panel_settings, color: Colors.purple),
-                ),
-              ),
-            ),
-
-          // Set Targets (ADMIN, CTC, LDC)
-          if (canManageTeams && !showAddMember && !showCreateTeam && !showSetTargets && !showDeleteTeam && !showRemoveIrFromTeam && !showChangeAccessLevel)
-            GestureDetector(
-              onTap: () {
-                setState(() => showSetTargets = true);
-                _fetchManagerTeams();
-              },
-              child: Card(
-                child: const ListTile(
-                  title: Text("Set Targets"),
-                  trailing: Icon(Icons.track_changes),
-                ),
-              ),
-            ),
-
-          // Delete Team (ADMIN, CTC, LDC)
-          if (canDeleteTeams && !showAddMember && !showCreateTeam && !showSetTargets && !showDeleteTeam && !showRemoveIrFromTeam && !showChangeAccessLevel)
-            GestureDetector(
-              onTap: () {
-                setState(() => showDeleteTeam = true);
-                _fetchManagerTeams();
-              },
-              child: Card(
-                child: const ListTile(
-                  title: Text("Delete Team"),
-                  trailing: Icon(Icons.delete, color: Colors.red),
-                ),
-              ),
-            ),
-
-          // Create Team Form
-          if (showCreateTeam)
-            Column(
-              children: [
-                TextField(
-                  controller: _teamNameController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Team Name',
-                    border: OutlineInputBorder(),
+            // Create Team
+            if (canManageTeams &&
+                !showAddMember &&
+                !showCreateTeam &&
+                !showSetTargets &&
+                !showDeleteTeam &&
+                !showRemoveIrFromTeam &&
+                !showChangeAccessLevel)
+              GestureDetector(
+                onTap: () => setState(() => showCreateTeam = true),
+                child: Card(
+                  child: const ListTile(
+                    title: Text("Create Team"),
+                    trailing: Icon(Icons.group_add),
+                    textColor: Colors.cyan,
                   ),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () => setState(() => showCreateTeam = false),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 16),
-                    GestureDetector(
-                      onTap: _isLoading ? null : _createTeam,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-                        decoration: BoxDecoration(
-                          color: _isLoading ? Colors.grey : Colors.cyanAccent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                            : const Text('Create', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  ],
+              ),
+
+            // Add Member to Team
+            if (canManageTeams &&
+                !showAddMember &&
+                !showCreateTeam &&
+                !showSetTargets &&
+                !showDeleteTeam &&
+                !showRemoveIrFromTeam &&
+                !showChangeAccessLevel)
+              GestureDetector(
+                onTap: () {
+                  setState(() => showAddMember = true);
+                  _fetchAllIrs();
+                  _fetchManagerTeams();
+                },
+                child: Card(
+                  child: const ListTile(
+                    title: Text("Add Member to Team"),
+                    trailing: Icon(Icons.person_add),
+                  ),
                 ),
-              ],
-            ),
+              ),
 
-          // Add Member Form
-          if (showAddMember)
-            _isFetchingData
-                ? const Center(child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: CircularProgressIndicator(),
-                  ))
-                : Column(
-                    children: [
-                      // Search field for IRs
-                      TextField(
-                        controller: _searchIrController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          labelText: 'Search IR',
-                          hintText: 'Search by ID or Name',
-                          prefixIcon: const Icon(Icons.search),
-                          border: const OutlineInputBorder(),
-                          suffixIcon: _searchIrController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear),
-                                  onPressed: () {
-                                    _searchIrController.clear();
-                                    _filterIrsForAddMember('');
-                                  },
-                                )
-                              : null,
-                        ),
-                        onChanged: _filterIrsForAddMember,
-                      ),
-                      const SizedBox(height: 16),
-
-                      _filteredIrs.isEmpty
-                          ? Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.orange),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.info_outline, color: Colors.orange),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _allIrs.isEmpty 
-                                        ? 'No IRs available. Check API connection.' 
-                                        : 'No IRs match your search.',
-                                    ),
-                                  ),
-                                  if (_allIrs.isEmpty)
-                                    IconButton(
-                                      icon: const Icon(Icons.refresh),
-                                      onPressed: _fetchAllIrs,
-                                    ),
-                                ],
-                              ),
-                            )
-                          : DropdownButtonFormField<String>(
-                              value: _selectedIrId,
-                              style: const TextStyle(color: Colors.white),
-                              dropdownColor: const Color(0xFF1E1E1E),
-                              decoration: const InputDecoration(
-                                labelText: 'Select IR',
-                                border: OutlineInputBorder(),
-                                hintText: 'Choose an IR',
-                              ),
-                              isExpanded: true,
-                              items: _filteredIrs.map((ir) {
-                                return DropdownMenuItem<String>(
-                                  value: ir['ir_id'] as String,
-                                  child: Text('${ir['ir_name']} (${ir['ir_id']})'),
-                                );
-                              }).toList(),
-                              onChanged: (value) => setState(() => _selectedIrId = value),
-                            ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: _selectedTeamId,
-                        style: const TextStyle(color: Colors.white),
-                        dropdownColor: const Color(0xFF1E1E1E),
-                        decoration: const InputDecoration(labelText: 'Select Team', border: OutlineInputBorder()),
-                        items: _managerTeams.map((team) {
-                          return DropdownMenuItem<String>(value: team['id'] as String, child: Text(team['name'] as String));
-                        }).toList(),
-                        onChanged: (value) => setState(() => _selectedTeamId = value),
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: _selectedRole,
-                        style: const TextStyle(color: Colors.white),
-                        dropdownColor: const Color(0xFF1E1E1E),
-                        decoration: const InputDecoration(labelText: 'Select Role', border: OutlineInputBorder()),
-                        items: const [
-                          DropdownMenuItem(value: 'LDC', child: Text('LDC (Manager)')),
-                          DropdownMenuItem(value: 'LS', child: Text('LS (Team Lead)')),
-                          DropdownMenuItem(value: 'IR', child: Text('IR (Member)')),
-                        ],
-                        onChanged: (value) => setState(() => _selectedRole = value),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          TextButton(
-                            onPressed: () => setState(() => showAddMember = false),
-                            child: const Text('Cancel'),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton(
-                            onPressed: _isLoading ? null : _addMemberToTeam,
-                            child: _isLoading
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Text('Add to Team'),
-                          ),
-                        ],
-                      ),
-                    ],
+            // Set Targets (ADMIN, CTC, LDC)
+            if (canManageTeams &&
+                !showAddMember &&
+                !showCreateTeam &&
+                !showSetTargets &&
+                !showDeleteTeam &&
+                !showRemoveIrFromTeam &&
+                !showChangeAccessLevel)
+              GestureDetector(
+                onTap: () {
+                  setState(() => showSetTargets = true);
+                  _fetchManagerTeams();
+                },
+                child: Card(
+                  child: const ListTile(
+                    title: Text("Set Targets"),
+                    trailing: Icon(Icons.track_changes),
                   ),
-
-          // Set Targets Form
-          if (showSetTargets)
-            _isFetchingData
-                ? const Center(child: CircularProgressIndicator())
-                : Column(
-                    children: [
-                      DropdownButtonFormField<String>(
-                        value: _selectedTargetTeamId,
-                        style: const TextStyle(color: Colors.white),
-                        dropdownColor: const Color(0xFF1E1E1E),
-                        decoration: const InputDecoration(labelText: 'Select Team', border: OutlineInputBorder()),
-                        items: _managerTeams.map((team) {
-                          return DropdownMenuItem<String>(value: team['id'] as String, child: Text(team['name'] as String));
-                        }).toList(),
-                        onChanged: _onTeamSelectedForTargets,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _weeklyInfoTargetController,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          labelText: 'Weekly Info Target',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _weeklyPlanTargetController,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          labelText: 'Weekly Plan Target',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _weeklyUvTargetController,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          labelText: 'Weekly UV Target',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          TextButton(
-                            onPressed: () => setState(() => showSetTargets = false),
-                            child: const Text('Cancel'),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton(
-                            onPressed: _isLoading ? null : _setTargets,
-                            child: _isLoading
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Text('Set Targets'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-
-          // Delete Team Form
-          if (showDeleteTeam)
-            _isFetchingData
-                ? const Center(child: CircularProgressIndicator())
-                : Column(
-                    children: [
-                      _managerTeams.isEmpty
-                          ? Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.orange),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Row(
-                                children: [
-                                  Icon(Icons.warning_amber, color: Colors.orange),
-                                  SizedBox(width: 8),
-                                  Expanded(child: Text('No teams available to delete.')),
-                                ],
-                              ),
-                            )
-                          : DropdownButtonFormField<String>(
-                              value: _selectedDeleteTeamId,
-                              style: const TextStyle(color: Colors.white),
-                              dropdownColor: const Color(0xFF1E1E1E),
-                              decoration: const InputDecoration(
-                                labelText: 'Select Team to Delete',
-                                border: OutlineInputBorder(),
-                              ),
-                              isExpanded: true,
-                              items: _managerTeams.map((team) {
-                                return DropdownMenuItem<String>(
-                                  value: team['id'] as String,
-                                  child: Text(team['name'] as String),
-                                );
-                              }).toList(),
-                              onChanged: (value) => setState(() => _selectedDeleteTeamId = value),
-                            ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          TextButton(
-                            onPressed: () => setState(() {
-                              showDeleteTeam = false;
-                              _selectedDeleteTeamId = null;
-                            }),
-                            child: const Text('Cancel'),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: _isLoading || _selectedDeleteTeamId == null ? null : _deleteTeam,
-                            child: _isLoading
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Text('Delete Team'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-
-          // Remove IR from Team Form
-          if (showRemoveIrFromTeam)
-            _isFetchingData
-                ? const Center(child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: CircularProgressIndicator(),
-                  ))
-                : Column(
-                    children: [
-                      // Search field for IRs
-                      TextField(
-                        controller: _searchRemoveIrController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          labelText: 'Search IR',
-                          hintText: 'Search by ID or Name',
-                          prefixIcon: const Icon(Icons.search),
-                          border: const OutlineInputBorder(),
-                          suffixIcon: _searchRemoveIrController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear),
-                                  onPressed: () {
-                                    _searchRemoveIrController.clear();
-                                    _filterIrsForRemove('');
-                                  },
-                                )
-                              : null,
-                        ),
-                        onChanged: _filterIrsForRemove,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Step 1: Select IR
-                      _filteredRemoveIrs.isEmpty
-                          ? Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.orange),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.info_outline, color: Colors.orange),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _allIrs.isEmpty 
-                                        ? 'No IRs available.' 
-                                        : 'No IRs match your search.',
-                                    ),
-                                  ),
-                                  if (_allIrs.isEmpty)
-                                    IconButton(
-                                      icon: const Icon(Icons.refresh),
-                                      onPressed: _fetchAllIrs,
-                                    ),
-                                ],
-                              ),
-                            )
-                          : DropdownButtonFormField<String>(
-                              value: _selectedRemoveIrId,
-                              style: const TextStyle(color: Colors.white),
-                              dropdownColor: const Color(0xFF1E1E1E),
-                              decoration: const InputDecoration(
-                                labelText: 'Select IR to Remove',
-                                border: OutlineInputBorder(),
-                              ),
-                              isExpanded: true,
-                              items: _filteredRemoveIrs.map((ir) {
-                                return DropdownMenuItem<String>(
-                                  value: ir['ir_id'] as String,
-                                  child: Text('${ir['ir_name']} (${ir['ir_id']})'),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _selectedRemoveIrId = value;
-                                  _selectedRemoveTeamId = null;
-                                  _irTeams = [];
-                                });
-                                if (value != null) {
-                                  _fetchTeamsForIr(value);
-                                }
-                              },
-                            ),
-                      const SizedBox(height: 16),
-
-                      // Step 2: Select Team (only shown after IR is selected)
-                      if (_selectedRemoveIrId != null)
-                        _isFetchingIrTeams
-                            ? const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: CircularProgressIndicator(),
-                              )
-                            : _irTeams.isEmpty
-                                ? Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.orange),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Row(
-                                      children: [
-                                        Icon(Icons.warning_amber, color: Colors.orange),
-                                        SizedBox(width: 8),
-                                        Expanded(child: Text('This IR is not part of any team.')),
-                                      ],
-                                    ),
-                                  )
-                                : DropdownButtonFormField<String>(
-                                    value: _selectedRemoveTeamId,
-                                    style: const TextStyle(color: Colors.white),
-                                    dropdownColor: const Color(0xFF1E1E1E),
-                                    decoration: const InputDecoration(
-                                      labelText: 'Select Team',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    isExpanded: true,
-                                    items: _irTeams.map((team) {
-                                      return DropdownMenuItem<String>(
-                                        value: team['id'] as String,
-                                        child: Text(team['name'] as String),
-                                      );
-                                    }).toList(),
-                                    onChanged: (value) => setState(() => _selectedRemoveTeamId = value),
-                                  ),
-
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          TextButton(
-                            onPressed: () => setState(() {
-                              showRemoveIrFromTeam = false;
-                              _selectedRemoveIrId = null;
-                              _selectedRemoveTeamId = null;
-                              _irTeams = [];
-                            }),
-                            child: const Text('Cancel'),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange,
-                                foregroundColor: Colors.white,
-                              ),
-                              onPressed: _isLoading || _selectedRemoveIrId == null || _selectedRemoveTeamId == null
-                                  ? null
-                                  : _removeIrFromTeam,
-                              child: _isLoading
-                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                  : const Text('Remove'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-
-          // Change Access Level Form
-          if (showChangeAccessLevel)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                const Text(
-                  "Promote / Demote IR",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 16),
+              ),
 
-                if (_isFetchingData)
-                  const Center(child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: CircularProgressIndicator(),
-                  ))
-                else ...[
-                  // Search field for IRs
+            // Delete Team (ADMIN, CTC, LDC)
+            if (canDeleteTeams &&
+                !showAddMember &&
+                !showCreateTeam &&
+                !showSetTargets &&
+                !showDeleteTeam &&
+                !showRemoveIrFromTeam &&
+                !showChangeAccessLevel)
+              GestureDetector(
+                onTap: () {
+                  setState(() => showDeleteTeam = true);
+                  _fetchManagerTeams();
+                },
+                child: Card(
+                  child: const ListTile(
+                    title: Text("Delete Team"),
+                    trailing: Icon(Icons.delete, color: Colors.red),
+                  ),
+                ),
+              ),
+
+            // Create Team Form
+            if (showCreateTeam)
+              Column(
+                children: [
                   TextField(
-                    controller: _searchAccessLevelIrController,
+                    controller: _teamNameController,
                     style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: 'Search IR',
-                      hintText: 'Search by ID or Name',
-                      prefixIcon: const Icon(Icons.search),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: _searchAccessLevelIrController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _searchAccessLevelIrController.clear();
-                                _filterIrsForAccessLevel('');
-                              },
-                            )
-                          : null,
+                    decoration: const InputDecoration(
+                      labelText: 'Team Name',
+                      border: OutlineInputBorder(),
                     ),
-                    onChanged: _filterIrsForAccessLevel,
                   ),
                   const SizedBox(height: 16),
-
-                  if (_filteredAccessLevelIrs.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.orange),
-                        borderRadius: BorderRadius.circular(4),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => setState(() => showCreateTeam = false),
+                        child: const Text('Cancel'),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline, color: Colors.orange),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _allIrs.isEmpty 
-                                ? 'No IRs available' 
-                                : 'No IRs match your search.',
-                              style: const TextStyle(color: Colors.grey),
-                            ),
-                          ),
-                          if (_allIrs.isEmpty)
-                            IconButton(
-                              icon: const Icon(Icons.refresh),
-                              onPressed: _fetchAllIrs,
-                            ),
-                        ],
-                      ),
-                    )
-                  else
-                    DropdownButtonFormField<String>(
-                      value: _selectedAccessLevelIrId,
-                      style: const TextStyle(color: Colors.white),
-                      dropdownColor: const Color(0xFF1E1E1E),
-                      decoration: const InputDecoration(
-                        labelText: 'Select IR',
-                        border: OutlineInputBorder(),
-                      ),
-                      isExpanded: true,
-                      items: _filteredAccessLevelIrs.map((ir) {
-                        return DropdownMenuItem<String>(
-                          value: ir['ir_id'] as String,
-                          child: Text('${ir['ir_name']} (${ir['ir_id']})'),
-                        );
-                      }).toList(),
-                      onChanged: (value) => setState(() => _selectedAccessLevelIrId = value),
-                    ),
-                ],
-
-                const SizedBox(height: 16),
-
-                DropdownButtonFormField<int>(
-                  value: _selectedNewAccessLevel,
-                  style: const TextStyle(color: Colors.white),
-                  dropdownColor: const Color(0xFF1E1E1E),
-                  decoration: const InputDecoration(
-                    labelText: 'New Access Level',
-                    border: OutlineInputBorder(),
-                    helperText: '1=Admin, 2=CTC, 3=LDC, 4=LS, 5=GC, 6=IR',
-                  ),
-                  isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(value: 1, child: Text('Level 1 - Admin')),
-                    DropdownMenuItem(value: 2, child: Text('Level 2 - CTC')),
-                    DropdownMenuItem(value: 3, child: Text('Level 3 - LDC')),
-                    DropdownMenuItem(value: 4, child: Text('Level 4 - LS')),
-                    DropdownMenuItem(value: 5, child: Text('Level 5 - GC')),
-                    DropdownMenuItem(value: 6, child: Text('Level 6 - IR')),
-                  ],
-                  onChanged: (value) => setState(() => _selectedNewAccessLevel = value),
-                ),
-
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () => setState(() {
-                        showChangeAccessLevel = false;
-                        _selectedAccessLevelIrId = null;
-                        _selectedNewAccessLevel = null;
-                      }),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: _isLoading || _selectedAccessLevelIrId == null || _selectedNewAccessLevel == null
-                            ? null
-                            : _changeAccessLevel,
+                      const SizedBox(width: 16),
+                      GestureDetector(
+                        onTap: _isLoading ? null : _createTeam,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12, horizontal: 24),
                           decoration: BoxDecoration(
-                            color: _isLoading || _selectedAccessLevelIrId == null || _selectedNewAccessLevel == null
-                                ? Colors.grey
-                                : Colors.purple,
+                            color: _isLoading ? Colors.grey : Colors.cyanAccent,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Center(
-                            child: _isLoading
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Text('Change Access Level', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.black))
+                              : const Text('Create',
+                                  style: TextStyle(
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+            // Add Member Form
+            if (showAddMember)
+              _isFetchingData
+                  ? const Center(
+                      child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: CircularProgressIndicator(),
+                    ))
+                  : Column(
+                      children: [
+                        // Search field for IRs
+                        TextField(
+                          controller: _searchIrController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: 'Search IR',
+                            hintText: 'Search by ID or Name',
+                            prefixIcon: const Icon(Icons.search),
+                            border: const OutlineInputBorder(),
+                            suffixIcon: _searchIrController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchIrController.clear();
+                                      _filterIrsForAddMember('');
+                                    },
+                                  )
+                                : null,
+                          ),
+                          onChanged: _filterIrsForAddMember,
+                        ),
+                        const SizedBox(height: 16),
+
+                        _filteredIrs.isEmpty
+                            ? Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.orange),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.info_outline,
+                                        color: Colors.orange),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _allIrs.isEmpty
+                                            ? 'No IRs available. Check API connection.'
+                                            : 'No IRs match your search.',
+                                      ),
+                                    ),
+                                    if (_allIrs.isEmpty)
+                                      IconButton(
+                                        icon: const Icon(Icons.refresh),
+                                        onPressed: _fetchAllIrs,
+                                      ),
+                                  ],
+                                ),
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Multi-select dropdown list
+                                  Container(
+                                    constraints:
+                                        const BoxConstraints(maxHeight: 200),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.grey),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: ListView.builder(
+                                      shrinkWrap: true,
+                                      itemCount: _filteredIrs.length,
+                                      itemBuilder: (context, index) {
+                                        final ir = _filteredIrs[index];
+                                        final irId = ir['ir_id'] as String;
+                                        final isSelected =
+                                            _selectedIrIds.contains(irId);
+
+                                        return CheckboxListTile(
+                                          value: isSelected,
+                                          title: Text(
+                                            '${ir['ir_name']} ($irId)',
+                                            style: const TextStyle(
+                                                color: Colors.white),
+                                          ),
+                                          activeColor: Colors.blue,
+                                          onChanged: (checked) {
+                                            setState(() {
+                                              if (checked == true) {
+                                                _selectedIrIds.add(irId);
+                                              } else {
+                                                _selectedIrIds.remove(irId);
+                                              }
+                                            });
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ),
+
+                                  // Display selected IRs as chips
+                                  if (_selectedIrIds.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[900],
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                '${_selectedIrIds.length} IR(s) selected',
+                                                style: const TextStyle(
+                                                  color: Colors.white70,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                              TextButton(
+                                                onPressed: () {
+                                                  setState(() =>
+                                                      _selectedIrIds.clear());
+                                                },
+                                                child: const Text('Clear All'),
+                                              ),
+                                            ],
+                                          ),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 4,
+                                            children:
+                                                _selectedIrIds.map((irId) {
+                                              final ir = _allIrs.firstWhere(
+                                                (i) => i['ir_id'] == irId,
+                                                orElse: () => {
+                                                  'ir_id': irId,
+                                                  'ir_name': 'Unknown'
+                                                },
+                                              );
+                                              return Chip(
+                                                label: Text(
+                                                  '${ir['ir_name']} ($irId)',
+                                                  style: const TextStyle(
+                                                      fontSize: 12),
+                                                ),
+                                                deleteIcon: const Icon(
+                                                    Icons.close,
+                                                    size: 18),
+                                                onDeleted: () {
+                                                  setState(() => _selectedIrIds
+                                                      .remove(irId));
+                                                },
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          value: _selectedTeamId,
+                          style: const TextStyle(color: Colors.white),
+                          dropdownColor: const Color(0xFF1E1E1E),
+                          decoration: const InputDecoration(
+                              labelText: 'Select Team',
+                              border: OutlineInputBorder()),
+                          items: _managerTeams.map((team) {
+                            return DropdownMenuItem<String>(
+                                value: team['id'] as String,
+                                child: Text(team['name'] as String));
+                          }).toList(),
+                          onChanged: (value) =>
+                              setState(() => _selectedTeamId = value),
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          value: _selectedRole,
+                          style: const TextStyle(color: Colors.white),
+                          dropdownColor: const Color(0xFF1E1E1E),
+                          decoration: const InputDecoration(
+                              labelText: 'Select Role',
+                              border: OutlineInputBorder()),
+                          items: const [
+                            DropdownMenuItem(value: 'LDC', child: Text('LDC')),
+                            DropdownMenuItem(value: 'LS', child: Text('LS')),
+                            DropdownMenuItem(value: 'GC', child: Text('GC')),
+                            DropdownMenuItem(value: 'IR', child: Text('IR')),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _selectedRole = value),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () =>
+                                  setState(() => showAddMember = false),
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 16),
+                            ElevatedButton(
+                              onPressed: _isLoading ? null : _addMemberToTeam,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : const Text('Add to Team'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+
+            // Set Targets Form
+            if (showSetTargets)
+              _isFetchingData
+                  ? const Center(child: CircularProgressIndicator())
+                  : Column(
+                      children: [
+                        DropdownButtonFormField<String>(
+                          value: _selectedTargetTeamId,
+                          style: const TextStyle(color: Colors.white),
+                          dropdownColor: const Color(0xFF1E1E1E),
+                          decoration: const InputDecoration(
+                              labelText: 'Select Team',
+                              border: OutlineInputBorder()),
+                          items: _managerTeams.map((team) {
+                            return DropdownMenuItem<String>(
+                                value: team['id'] as String,
+                                child: Text(team['name'] as String));
+                          }).toList(),
+                          onChanged: _onTeamSelectedForTargets,
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _weeklyInfoTargetController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: const InputDecoration(
+                            labelText: 'Weekly Info Target',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _weeklyPlanTargetController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: const InputDecoration(
+                            labelText: 'Weekly Plan Target',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _weeklyUvTargetController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: const InputDecoration(
+                            labelText: 'Weekly UV Target',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () =>
+                                  setState(() => showSetTargets = false),
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 16),
+                            ElevatedButton(
+                              onPressed: _isLoading ? null : _setTargets,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : const Text('Set Targets'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+
+            // Delete Team Form
+            if (showDeleteTeam)
+              _isFetchingData
+                  ? const Center(child: CircularProgressIndicator())
+                  : Column(
+                      children: [
+                        _managerTeams.isEmpty
+                            ? Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.orange),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.warning_amber,
+                                        color: Colors.orange),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                        child: Text(
+                                            'No teams available to delete.')),
+                                  ],
+                                ),
+                              )
+                            : DropdownButtonFormField<String>(
+                                value: _selectedDeleteTeamId,
+                                style: const TextStyle(color: Colors.white),
+                                dropdownColor: const Color(0xFF1E1E1E),
+                                decoration: const InputDecoration(
+                                  labelText: 'Select Team to Delete',
+                                  border: OutlineInputBorder(),
+                                ),
+                                isExpanded: true,
+                                items: _managerTeams.map((team) {
+                                  return DropdownMenuItem<String>(
+                                    value: team['id'] as String,
+                                    child: Text(team['name'] as String),
+                                  );
+                                }).toList(),
+                                onChanged: (value) => setState(
+                                    () => _selectedDeleteTeamId = value),
+                              ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () => setState(() {
+                                showDeleteTeam = false;
+                                _selectedDeleteTeamId = null;
+                              }),
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 16),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed:
+                                  _isLoading || _selectedDeleteTeamId == null
+                                      ? null
+                                      : _deleteTeam,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white))
+                                  : const Text('Delete Team'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+
+            // Remove IR from Team Form
+            if (showRemoveIrFromTeam)
+              _isFetchingData
+                  ? const Center(
+                      child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: CircularProgressIndicator(),
+                    ))
+                  : Column(
+                      children: [
+                        // Search field for IRs
+                        TextField(
+                          controller: _searchRemoveIrController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: 'Search IR',
+                            hintText: 'Search by ID or Name',
+                            prefixIcon: const Icon(Icons.search),
+                            border: const OutlineInputBorder(),
+                            suffixIcon:
+                                _searchRemoveIrController.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear),
+                                        onPressed: () {
+                                          _searchRemoveIrController.clear();
+                                          _filterIrsForRemove('');
+                                        },
+                                      )
+                                    : null,
+                          ),
+                          onChanged: _filterIrsForRemove,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Step 1: Select IR
+                        _filteredRemoveIrs.isEmpty
+                            ? Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.orange),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.info_outline,
+                                        color: Colors.orange),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _allIrs.isEmpty
+                                            ? 'No IRs available.'
+                                            : 'No IRs match your search.',
+                                      ),
+                                    ),
+                                    if (_allIrs.isEmpty)
+                                      IconButton(
+                                        icon: const Icon(Icons.refresh),
+                                        onPressed: _fetchAllIrs,
+                                      ),
+                                  ],
+                                ),
+                              )
+                            : DropdownButtonFormField<String>(
+                                value: _selectedRemoveIrId,
+                                style: const TextStyle(color: Colors.white),
+                                dropdownColor: const Color(0xFF1E1E1E),
+                                decoration: const InputDecoration(
+                                  labelText: 'Select IR to Remove',
+                                  border: OutlineInputBorder(),
+                                ),
+                                isExpanded: true,
+                                items: _filteredRemoveIrs.map((ir) {
+                                  return DropdownMenuItem<String>(
+                                    value: ir['ir_id'] as String,
+                                    child: Text(
+                                        '${ir['ir_name']} (${ir['ir_id']})'),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedRemoveIrId = value;
+                                    _selectedRemoveTeamId = null;
+                                    _irTeams = [];
+                                  });
+                                  if (value != null) {
+                                    _fetchTeamsForIr(value);
+                                  }
+                                },
+                              ),
+                        const SizedBox(height: 16),
+
+                        // Step 2: Select Team (only shown after IR is selected)
+                        if (_selectedRemoveIrId != null)
+                          _isFetchingIrTeams
+                              ? const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: CircularProgressIndicator(),
+                                )
+                              : _irTeams.isEmpty
+                                  ? Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        border:
+                                            Border.all(color: Colors.orange),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Row(
+                                        children: [
+                                          Icon(Icons.warning_amber,
+                                              color: Colors.orange),
+                                          SizedBox(width: 8),
+                                          Expanded(
+                                              child: Text(
+                                                  'This IR is not part of any team.')),
+                                        ],
+                                      ),
+                                    )
+                                  : DropdownButtonFormField<String>(
+                                      value: _selectedRemoveTeamId,
+                                      style:
+                                          const TextStyle(color: Colors.white),
+                                      dropdownColor: const Color(0xFF1E1E1E),
+                                      decoration: const InputDecoration(
+                                        labelText: 'Select Team',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      isExpanded: true,
+                                      items: _irTeams.map((team) {
+                                        return DropdownMenuItem<String>(
+                                          value: team['id'] as String,
+                                          child: Text(team['name'] as String),
+                                        );
+                                      }).toList(),
+                                      onChanged: (value) => setState(
+                                          () => _selectedRemoveTeamId = value),
+                                    ),
+
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () => setState(() {
+                                showRemoveIrFromTeam = false;
+                                _selectedRemoveIrId = null;
+                                _selectedRemoveTeamId = null;
+                                _irTeams = [];
+                              }),
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: _isLoading ||
+                                        _selectedRemoveIrId == null ||
+                                        _selectedRemoveTeamId == null
+                                    ? null
+                                    : _removeIrFromTeam,
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white))
+                                    : const Text('Remove'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+
+            // Change Access Level Form
+            if (showChangeAccessLevel)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  const Text(
+                    "Promote / Demote IR",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_isFetchingData)
+                    const Center(
+                        child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: CircularProgressIndicator(),
+                    ))
+                  else ...[
+                    // Search field for IRs
+                    TextField(
+                      controller: _searchAccessLevelIrController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Search IR',
+                        hintText: 'Search by ID or Name',
+                        prefixIcon: const Icon(Icons.search),
+                        border: const OutlineInputBorder(),
+                        suffixIcon:
+                            _searchAccessLevelIrController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchAccessLevelIrController.clear();
+                                      _filterIrsForAccessLevel('');
+                                    },
+                                  )
+                                : null,
+                      ),
+                      onChanged: _filterIrsForAccessLevel,
+                    ),
+                    const SizedBox(height: 16),
+
+                    if (_filteredAccessLevelIrs.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.orange),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline,
+                                color: Colors.orange),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _allIrs.isEmpty
+                                    ? 'No IRs available'
+                                    : 'No IRs match your search.',
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                            ),
+                            if (_allIrs.isEmpty)
+                              IconButton(
+                                icon: const Icon(Icons.refresh),
+                                onPressed: _fetchAllIrs,
+                              ),
+                          ],
+                        ),
+                      )
+                    else
+                      DropdownButtonFormField<String>(
+                        value: _selectedAccessLevelIrId,
+                        style: const TextStyle(color: Colors.white),
+                        dropdownColor: const Color(0xFF1E1E1E),
+                        decoration: const InputDecoration(
+                          labelText: 'Select IR',
+                          border: OutlineInputBorder(),
+                        ),
+                        isExpanded: true,
+                        items: _filteredAccessLevelIrs.map((ir) {
+                          return DropdownMenuItem<String>(
+                            value: ir['ir_id'] as String,
+                            child: Text('${ir['ir_name']} (${ir['ir_id']})'),
+                          );
+                        }).toList(),
+                        onChanged: (value) =>
+                            setState(() => _selectedAccessLevelIrId = value),
+                      ),
+                  ],
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    value: _selectedNewAccessLevel,
+                    style: const TextStyle(color: Colors.white),
+                    dropdownColor: const Color(0xFF1E1E1E),
+                    decoration: const InputDecoration(
+                      labelText: 'New Access Level',
+                      border: OutlineInputBorder(),
+                      helperText: '1=Admin, 2=CTC, 3=LDC, 4=LS, 5=GC, 6=IR',
+                    ),
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(
+                          value: 1, child: Text('Level 1 - Admin')),
+                      DropdownMenuItem(value: 2, child: Text('Level 2 - CTC')),
+                      DropdownMenuItem(value: 3, child: Text('Level 3 - LDC')),
+                      DropdownMenuItem(value: 4, child: Text('Level 4 - LS')),
+                      DropdownMenuItem(value: 5, child: Text('Level 5 - GC')),
+                      DropdownMenuItem(value: 6, child: Text('Level 6 - IR')),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _selectedNewAccessLevel = value),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => setState(() {
+                          showChangeAccessLevel = false;
+                          _selectedAccessLevelIrId = null;
+                          _selectedNewAccessLevel = null;
+                        }),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _isLoading ||
+                                  _selectedAccessLevelIrId == null ||
+                                  _selectedNewAccessLevel == null
+                              ? null
+                              : _changeAccessLevel,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: _isLoading ||
+                                      _selectedAccessLevelIrId == null ||
+                                      _selectedNewAccessLevel == null
+                                  ? Colors.grey
+                                  : Colors.purple,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white))
+                                  : const Text('Change Access Level',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold)),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

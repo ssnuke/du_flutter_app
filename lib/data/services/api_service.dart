@@ -54,23 +54,43 @@ class ApiService {
   /// Add IR to a team
   /// Based on Postman: POST /api/add_ir_to_team with {"ir_id": "IM1579", "team_id": "1", "role": "LDC"}
   static Future<Map<String, dynamic>> addIrToTeam({
-    required String irId,
+    String? irId,
+    List<String>? irIds,
     required String teamId,
     required String role,
+    String? requesterIrId,
   }) async {
     try {
       final url = Uri.parse('$baseUrl$addIrToTeamEndpoint');
-      print('Adding IR to team at: $url');
-      print('Payload: ir_id=$irId, team_id=$teamId, role=$role');
+      print('Adding IR(s) to team at: $url');
+
+      final Map<String, dynamic> payload = {
+        'team_id': teamId,
+        'role': role,
+      };
+      
+      // Support both single and bulk additions
+      if (irIds != null && irIds.isNotEmpty) {
+        payload['ir_ids'] = irIds;
+        print('Payload: ir_ids=$irIds, team_id=$teamId, role=$role, requester_ir_id=$requesterIrId');
+      } else if (irId != null) {
+        payload['ir_id'] = irId;
+        print('Payload: ir_id=$irId, team_id=$teamId, role=$role, requester_ir_id=$requesterIrId');
+      } else {
+        return {
+          'success': false,
+          'error': 'Either irId or irIds must be provided'
+        };
+      }
+      
+      if (requesterIrId != null) {
+        payload['requester_ir_id'] = requesterIrId;
+      }
 
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'ir_id': irId,
-          'team_id': teamId,
-          'role': role,
-        }),
+        body: jsonEncode(payload),
       );
 
       print(
@@ -104,8 +124,11 @@ class ApiService {
   static Future<Map<String, dynamic>> removeIrFromTeam({
     required String teamId,
     required String irId,
+    String? requesterIrId,
   }) async {
-    final url = Uri.parse('$baseUrl$removeIrFromTeamEndpoint/$teamId/$irId');
+    final url = requesterIrId != null
+        ? Uri.parse('$baseUrl$removeIrFromTeamEndpoint/$teamId/$irId?requester_ir_id=$requesterIrId')
+        : Uri.parse('$baseUrl$removeIrFromTeamEndpoint/$teamId/$irId');
     final response = await http.delete(url);
 
     if (response.statusCode == 200) {
@@ -119,9 +142,71 @@ class ApiService {
     }
   }
 
+  /// Move IR from one team to another
+  /// PUT /api/move_ir_to_team/
+  static Future<Map<String, dynamic>> moveIrToTeam({
+    required String irId,
+    required String currentTeamId,
+    required String newTeamId,
+    String? newRole,
+    String? requesterIrId,
+  }) async {
+    try {
+      final url = Uri.parse('$baseUrl$moveIrToTeamEndpoint');
+      print('Moving IR to new team at: $url');
+      print('Payload: ir_id=$irId, current_team=$currentTeamId, new_team=$newTeamId');
+
+      final Map<String, dynamic> payload = {
+        'ir_id': irId,
+        'current_team_id': currentTeamId,
+        'new_team_id': newTeamId,
+      };
+      
+      if (newRole != null) {
+        payload['new_role'] = newRole;
+      }
+      
+      if (requesterIrId != null) {
+        payload['requester_ir_id'] = requesterIrId;
+      }
+
+      final response = await http.put(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+
+      print('Move IR response: ${response.statusCode} - ${response.body}');
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      } else {
+        try {
+          final body = jsonDecode(response.body);
+          return {
+            'success': false,
+            'error': body['detail'] ??
+                body['message'] ??
+                'Failed to move IR to new team (${response.statusCode})'
+          };
+        } catch (e) {
+          return {
+            'success': false,
+            'error': 'Failed to move IR to new team (${response.statusCode})'
+          };
+        }
+      }
+    } catch (e) {
+      print('Move IR to team error: $e');
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
+
   /// Delete a team
-  static Future<Map<String, dynamic>> deleteTeam(String teamId) async {
-    final url = Uri.parse('$baseUrl$deleteTeamEndpoint/$teamId');
+  static Future<Map<String, dynamic>> deleteTeam(String teamId, {String? requesterIrId}) async {
+    final url = requesterIrId != null
+        ? Uri.parse('$baseUrl$deleteTeamEndpoint/$teamId?requester_ir_id=$requesterIrId')
+        : Uri.parse('$baseUrl$deleteTeamEndpoint/$teamId');
     final response = await http.delete(url);
 
     if (response.statusCode == 200) {
@@ -173,17 +258,54 @@ class ApiService {
   }
 
   /// Get all info details for an IR
-  static Future<Map<String, dynamic>> getInfoDetails(String irId) async {
-    final url = Uri.parse('$baseUrl$getInfoDetailsEndpoint/$irId');
-    final response = await http.get(url);
+  static Future<Map<String, dynamic>> getInfoDetails(
+    String irId, {
+    String? response,
+    String? fromDate,
+    String? toDate,
+    int? week,
+    int? year,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      
+      // Week/year takes precedence over fromDate/toDate
+      if (week != null && year != null) {
+        queryParams['week'] = week.toString();
+        queryParams['year'] = year.toString();
+      } else {
+        if (fromDate != null) queryParams['from_date'] = fromDate;
+        if (toDate != null) queryParams['to_date'] = toDate;
+      }
+      
+      if (response != null && response.isNotEmpty) {
+        queryParams['response'] = response;
+      }
+      
+      final url = Uri.parse('$baseUrl$getInfoDetailsEndpoint/$irId').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final httpResponse = await http.get(url);
 
-    if (response.statusCode == 200) {
-      return {'success': true, 'data': jsonDecode(response.body)};
-    } else {
-      return {
-        'success': false,
-        'error': jsonDecode(response.body)['message'] ?? 'Failed to fetch leads'
-      };
+      if (httpResponse.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(httpResponse.body)};
+      } else {
+        try {
+          final errorBody = jsonDecode(httpResponse.body);
+          return {
+            'success': false,
+            'error': errorBody['detail'] ?? errorBody['message'] ?? 'Failed to fetch leads (${httpResponse.statusCode})'
+          };
+        } catch (e) {
+          return {
+            'success': false,
+            'error': 'Failed to fetch leads (${httpResponse.statusCode})'
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('getInfoDetails error: $e');
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 
@@ -194,19 +316,25 @@ class ApiService {
     required String infoName,
     required String response,
     required String comments,
+    required DateTime infoDate,
+    String? requesterIrId,
   }) async {
     final url = Uri.parse('$baseUrl$updateInfoDetailEndpoint/$infoId/');
+    final payload = {
+      "ir": ir,
+      'info_name': infoName,
+      'response': response,
+      'comments': comments,
+      'info_date': infoDate.toIso8601String(),
+    };
+    if (requesterIrId != null) {
+      payload['requester_ir_id'] = requesterIrId;
+    }
     final httpResponse = await http.put(
       url,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        "ir": ir,
-        'info_name': infoName,
-        'response': response,
-        'comments': comments,
-      }),
+      body: jsonEncode(payload),
     );
-
     if (httpResponse.statusCode == 200) {
       return {'success': true, 'data': jsonDecode(httpResponse.body)};
     } else {
@@ -220,8 +348,10 @@ class ApiService {
   }
 
   /// Delete an info detail
-  static Future<Map<String, dynamic>> deleteInfoDetail(int infoId) async {
-    final url = Uri.parse('$baseUrl$deleteInfoDetailEndpoint/$infoId');
+  static Future<Map<String, dynamic>> deleteInfoDetail(int infoId, {String? requesterIrId}) async {
+    final url = requesterIrId != null
+        ? Uri.parse('$baseUrl$deleteInfoDetailEndpoint/$infoId?requester_ir_id=$requesterIrId')
+        : Uri.parse('$baseUrl$deleteInfoDetailEndpoint/$infoId');
     final response = await http.delete(url);
 
     if (response.statusCode == 200) {
@@ -237,9 +367,13 @@ class ApiService {
   // ==================== LDC/MANAGER OPERATIONS ====================
 
   /// Get all LDCs/Managers
-  static Future<Map<String, dynamic>> getLdcs() async {
-    final url = Uri.parse('$baseUrl$getLdcsEndpoint');
-    final response = await http.get(url);
+  /// requesterIrId: The IR ID of the user making the request (for hierarchy filtering)
+  static Future<Map<String, dynamic>> getLdcs({String? requesterIrId}) async {
+    final uri = requesterIrId != null
+        ? Uri.parse('$baseUrl$getLdcsEndpoint').replace(
+            queryParameters: {'requester_ir_id': requesterIrId})
+        : Uri.parse('$baseUrl$getLdcsEndpoint');
+    final response = await http.get(uri);
 
     if (response.statusCode == 200) {
       return {'success': true, 'data': jsonDecode(response.body)};
@@ -252,9 +386,13 @@ class ApiService {
   }
 
   /// Get teams managed by an LDC
-  static Future<Map<String, dynamic>> getTeamsByLdc(String irId) async {
-    final url = Uri.parse('$baseUrl$getTeamsByLdcEndpoint/$irId');
-    final response = await http.get(url);
+  /// requesterIrId: The IR ID of the user making the request (for hierarchy filtering)
+  static Future<Map<String, dynamic>> getTeamsByLdc(String irId, {String? requesterIrId}) async {
+    final uri = requesterIrId != null
+        ? Uri.parse('$baseUrl$getTeamsByLdcEndpoint/$irId').replace(
+            queryParameters: {'requester_ir_id': requesterIrId})
+        : Uri.parse('$baseUrl$getTeamsByLdcEndpoint/$irId');
+    final response = await http.get(uri);
 
     if (response.statusCode == 200) {
       return {'success': true, 'data': jsonDecode(response.body)};
@@ -277,6 +415,21 @@ class ApiService {
       return {
         'success': false,
         'error': jsonDecode(response.body)['message'] ?? 'Failed to fetch teams'
+      };
+    }
+  }
+
+  /// Get visible teams for an IR (based on role and hierarchy)
+  static Future<Map<String, dynamic>> getVisibleTeams(String irId) async {
+    final url = Uri.parse('$baseUrl$getVisibleTeamsEndpoint/$irId');
+    final response = await http.get(url);
+
+    if (response.statusCode == 200) {
+      return {'success': true, 'data': jsonDecode(response.body)};
+    } else {
+      return {
+        'success': false,
+        'error': jsonDecode(response.body)['message'] ?? 'Failed to fetch visible teams'
       };
     }
   }
@@ -354,20 +507,100 @@ class ApiService {
     }
   }
 
-  /// Get targets dashboard for an IR
-  static Future<Map<String, dynamic>> getTargetsDashboard(String irId) async {
-    final url = Uri.parse('$baseUrl$getTargetsDashboardEndpoint/$irId');
-    final response = await http.get(url);
+  /// Get targets for an IR or team
+  static Future<Map<String, dynamic>> getTargets({
+    String? irId,
+    String? teamId,
+    String? requesterIrId,
+    int? week,
+    int? year,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (irId != null) queryParams['ir_id'] = irId;
+      if (teamId != null) queryParams['team_id'] = teamId;
+      if (requesterIrId != null) queryParams['requester_ir_id'] = requesterIrId;
+      if (week != null) queryParams['week'] = week.toString();
+      if (year != null) queryParams['year'] = year.toString();
 
-    if (response.statusCode == 200) {
-      // print("dashboard targets: ${response.body}");
-      return {'success': true, 'data': jsonDecode(response.body)};
-    } else {
-      return {
-        'success': false,
-        'error':
-            jsonDecode(response.body)['message'] ?? 'Failed to fetch targets'
-      };
+      final url = Uri.parse('$baseUrl/api/get_targets').replace(
+        queryParameters: queryParams,
+      );
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return {'success': true, 'data': body};
+      } else {
+        try {
+          final body = jsonDecode(response.body);
+          return {
+            'success': false,
+            'error': body['detail'] ?? 'Failed to fetch targets (${response.statusCode})'
+          };
+        } catch (e) {
+          return {
+            'success': false,
+            'error': 'Failed to fetch targets (${response.statusCode})'
+          };
+        }
+      }
+    } catch (e) {
+      print('Get targets error: $e');
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
+
+  /// Get targets dashboard for an IR
+  static Future<Map<String, dynamic>> getTargetsDashboard(String irId, {int? week, int? year}) async {
+    try {
+      var url = Uri.parse('$baseUrl/api/targets_dashboard/$irId/');
+      if (week != null && year != null) {
+        url = url.replace(queryParameters: {
+          'week': week.toString(),
+          'year': year.toString(),
+        });
+      }
+      
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': json.decode(response.body)};
+      } else {
+        return {'success': false, 'message': 'Failed to load targets dashboard'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  /// Fetch weekly targets for a specific IR
+  static Future<Map<String, dynamic>> getWeeklyTargets({
+    required String irId,
+    required int week,
+    required int year,
+  }) async {
+    try {
+      final url = Uri.parse('$baseUrl/api/weekly_targets/$irId/').replace(
+        queryParameters: {
+          'week': week.toString(),
+          'year': year.toString(),
+        },
+      );
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      } else {
+        return {
+          'success': false,
+          'error': jsonDecode(response.body)['message'] ?? 'Failed to fetch weekly targets'
+        };
+      }
+    } catch (e) {
+      print('Get weekly targets error: $e');
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 
@@ -380,6 +613,7 @@ class ApiService {
     required String response,
     required String comments,
     required DateTime planDate,
+    String? status,
   }) async {
     final url = Uri.parse('$baseUrl$addPlanDetailEndpoint/$irId/');
     final payload = [
@@ -388,6 +622,7 @@ class ApiService {
         'plan_date': planDate.toIso8601String(),
         'comments': comments,
         'plan_name': planName,
+        if (status != null) 'status': status,
       }
     ];
 
@@ -424,9 +659,22 @@ class ApiService {
   }
 
   /// Get all plan details for an IR
-  static Future<Map<String, dynamic>> getPlanDetails(String irId) async {
+  static Future<Map<String, dynamic>> getPlanDetails(String irId, {String? status, int? week, int? year}) async {
     try {
-      final url = Uri.parse('$baseUrl$getPlanDetailsEndpoint/$irId');
+      final queryParams = <String, String>{};
+      
+      if (week != null && year != null) {
+        queryParams['week'] = week.toString();
+        queryParams['year'] = year.toString();
+      }
+      
+      if (status != null && status.isNotEmpty) {
+        queryParams['status'] = status;
+      }
+      
+      final url = Uri.parse('$baseUrl$getPlanDetailsEndpoint/$irId').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -458,6 +706,8 @@ class ApiService {
     required int planId,
     required String planName,
     required String comments,
+    String? requesterIrId,
+    String? status,
   }) async {
     try {
       final url = Uri.parse('$baseUrl$updatePlanDetailEndpoint/$planId/');
@@ -466,6 +716,14 @@ class ApiService {
         'plan_name': planName,
         'comments': comments,
       };
+      
+      if (requesterIrId != null) {
+        payload['requester_ir_id'] = requesterIrId;
+      }
+      
+      if (status != null) {
+        payload['status'] = status;
+      }
 
       // print('Updating plan at: $url');
       // print('Payload: ${jsonEncode(payload)}');
@@ -503,9 +761,11 @@ class ApiService {
   }
 
   /// Delete a plan detail
-  static Future<Map<String, dynamic>> deletePlanDetail(int planId) async {
+  static Future<Map<String, dynamic>> deletePlanDetail(int planId, {String? requesterIrId}) async {
     try {
-      final url = Uri.parse('$baseUrl$deletePlanDetailEndpoint/$planId');
+      final url = requesterIrId != null
+          ? Uri.parse('$baseUrl$deletePlanDetailEndpoint/$planId?requester_ir_id=$requesterIrId')
+          : Uri.parse('$baseUrl$deletePlanDetailEndpoint/$planId');
       final response = await http.delete(url);
 
       if (response.statusCode == 200) {
@@ -625,9 +885,18 @@ class ApiService {
   }
 
   /// Get team info total (members_info_total and members_plan_total)
-  static Future<Map<String, dynamic>> getTeamInfoTotal(String teamId) async {
-    final url = Uri.parse('$baseUrl$getTeamInfoTotalEndpoint/$teamId/');
-    final response = await http.get(url);
+  static Future<Map<String, dynamic>> getTeamInfoTotal(String teamId, {String? fromDate, String? toDate}) async {
+    var uri = Uri.parse('$baseUrl$getTeamInfoTotalEndpoint/$teamId/');
+    
+    // Add date filters if provided
+    if (fromDate != null || toDate != null) {
+      final queryParams = <String, String>{};
+      if (fromDate != null) queryParams['from_date'] = fromDate;
+      if (toDate != null) queryParams['to_date'] = toDate;
+      uri = uri.replace(queryParameters: queryParams);
+    }
+    
+    final response = await http.get(uri);
 
     if (response.statusCode == 200) {
       return {'success': true, 'data': jsonDecode(response.body)};
@@ -636,6 +905,99 @@ class ApiService {
         'success': false,
         'error': jsonDecode(response.body)['message'] ??
             'Failed to fetch team info totals'
+      };
+    }
+  }
+
+  /// Register a new IR
+  /// Called by Admin, CTC, or LDC to register a new IR under their hierarchy
+  static Future<Map<String, dynamic>> registerNewIR({
+    required String parentIrId,
+    required String newIrId,
+    required String newIrName,
+    required String newIrEmail,
+    required String password,
+    int accessLevel = 6,  // Default to IR level
+  }) async {
+    try {
+      // Step 1: Add IR ID to whitelist
+      debugPrint('Adding IR ID to whitelist: $newIrId');
+      final addIdResponse = await http.post(
+        Uri.parse('$baseUrl$addIrId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'ir_id': newIrId}),
+      );
+
+      if (addIdResponse.statusCode != 200 && addIdResponse.statusCode != 201) {
+        final error = json.decode(addIdResponse.body);
+        return {
+          'success': false,
+          'message': error['detail'] ?? error['message'] ?? 'Could not reserve IR ID',
+        };
+      }
+
+      // Step 2: Register the IR
+      debugPrint('Registering new IR: $newIrId with parent: $parentIrId');
+      final response = await http.post(
+        Uri.parse('$baseUrl$registerIrId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'ir_id': newIrId,
+          'ir_name': newIrName,
+          'ir_email': newIrEmail,
+          'ir_password': password,
+          'ir_access_level': accessLevel,
+          'parent_ir_id': parentIrId,
+        }),
+      );
+
+      debugPrint('Register IR response status: ${response.statusCode}');
+      debugPrint('Register IR response body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        try {
+          final data = json.decode(response.body);
+          return {
+            'success': true,
+            'message': data['message'] ?? 'IR registered successfully',
+            'ir_id': newIrId,
+          };
+        } catch (e) {
+          return {
+            'success': true,
+            'message': 'IR registered successfully',
+            'ir_id': newIrId,
+          };
+        }
+      } else {
+        try {
+          final error = json.decode(response.body);
+          // Handle errors array format
+          if (error['errors'] != null && error['errors'] is List) {
+            final errors = error['errors'] as List;
+            if (errors.isNotEmpty) {
+              return {
+                'success': false,
+                'message': errors[0]['error'] ?? 'Registration failed',
+              };
+            }
+          }
+          return {
+            'success': false,
+            'message': error['detail'] ?? error['message'] ?? 'Registration failed',
+          };
+        } catch (e) {
+          return {
+            'success': false,
+            'message': 'Server error (${response.statusCode})',
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('Register IR network error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
       };
     }
   }
@@ -766,6 +1128,48 @@ class ApiService {
       };
     }
    
+  }
+
+  /// Update team name
+  static Future<Map<String, dynamic>> updateTeamName({
+    required int teamId,
+    required String newName,
+    String? requesterIrId,
+  }) async {
+    try {
+      final url = Uri.parse('$baseUrl/api/update_team_name/$teamId/');
+      final payload = {'name': newName};
+      
+      if (requesterIrId != null) {
+        payload['requester_ir_id'] = requesterIrId;
+      }
+
+      final response = await http.patch(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      } else {
+        try {
+          final body = jsonDecode(response.body);
+          return {
+            'success': false,
+            'error': body['detail'] ?? body['message'] ?? 'Failed to update team name'
+          };
+        } catch (e) {
+          return {
+            'success': false,
+            'error': 'Failed to update team name (${response.statusCode})'
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('Update team name error: $e');
+      return {'success': false, 'error': 'Network error: $e'};
+    }
   }
 
 }

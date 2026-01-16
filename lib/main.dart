@@ -1,13 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter_windowmanager/flutter_windowmanager.dart';
 import 'package:leadtracker/core/constants/api_constants.dart';
 import 'package:leadtracker/presentation/screens/auth/login_screen.dart';
 import 'package:leadtracker/presentation/screens/auth/signup_screen.dart';
 import 'package:leadtracker/presentation/screens/home/home_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+  
+  // Prevent screenshots and screen recording on Android only (not web)
+  if (!kIsWeb && Platform.isAndroid) {
+    await FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
+  }
+  
   runApp(const MyApp());
 }
 
